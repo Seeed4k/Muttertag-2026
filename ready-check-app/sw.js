@@ -1,5 +1,5 @@
 // Offline cache. Bump VERSION after uploading changed files so phones pick them up.
-var VERSION = "ready-check-v1";
+var VERSION = "ready-check-v2";
 var FILES = ["./", "index.html", "manifest.webmanifest", "fonts/fonts.css",
   "fonts/unbounded-latin.woff2", "fonts/unbounded-latin-ext.woff2",
   "fonts/figtree-latin.woff2", "fonts/figtree-latin-ext.woff2",
