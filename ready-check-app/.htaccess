@@ -1,0 +1,18 @@
+# Ready Check – Einstellungen für IONOS (Apache)
+AddType application/manifest+json .webmanifest
+AddType font/woff2 .woff2
+
+# Nicht in Suchmaschinen auftauchen
+<IfModule mod_headers.c>
+  Header set X-Robots-Tag "noindex, nofollow"
+  <FilesMatch "^(sw\.js|index\.html)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
+
+# Immer HTTPS (nötig, damit die App installierbar ist)
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} !=on
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>

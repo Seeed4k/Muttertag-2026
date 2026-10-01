@@ -3,9 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#0b0a12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ready Check">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <title>Ready Check</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=Figtree:wght@400;600;800&display=swap">
+<link rel="stylesheet" href="fonts/fonts.css">
 <style>
 /* Layout: phone-first vertical feed — story strip of days on top, task "posts" below, bottom tab bar like a social app. Print: pure black/white A4 weekly sheet. */
 :root{
@@ -264,6 +272,12 @@ html{background:var(--bg)}
   .sheet tr{break-inside:avoid}
 }
 </style>
+<style>
+/* Standalone app: keep content clear of notch and home bar */
+.app{padding-top:calc(14px + env(safe-area-inset-top,0px))}
+.print-now{margin-top:12px}
+html,body{overscroll-behavior-y:none}
+</style>
 </head>
 <body>
 
@@ -324,8 +338,9 @@ html{background:var(--bg)}
 
   <section id="viewPrint" hidden>
     <div class="printinfo">
-      <b>Zum Ausdrucken:</b> Diese Seite im Browser öffnen (Chrome, Safari, Edge) und <b>Strg + P</b> drücken (Mac: <b>⌘ + P</b>, Handy: Teilen → Drucken). Gedruckt wird nur der Wochenplan, in Schwarz-Weiß auf eine A4-Seite.
+      <b>Zum Ausdrucken:</b> Auf den Button tippen oder <b>Strg + P</b> drücken (Mac: <b>⌘ + P</b>). Gedruckt wird nur der Wochenplan, in Schwarz-Weiß auf eine A4-Seite.
     </div>
+    <button type="button" class="btn print-now" id="printNow">Wochenplan drucken</button>
     <div class="paper-wrap">
       <div class="sheet" id="sheet"></div>
     </div>
@@ -672,6 +687,10 @@ html{background:var(--bg)}
   function renderAll(){ renderToday(); renderWeek(); renderSheet(); }
   renderAll();
 })();
+</script>
+<script>
+document.getElementById("printNow").onclick=function(){ window.print(); };
+if ("serviceWorker" in navigator) addEventListener("load",function(){ navigator.serviceWorker.register("sw.js").catch(function(){}); });
 </script>
 </body>
 </html>
