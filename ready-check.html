@@ -62,10 +62,6 @@ button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px soli
 .story .we{font-size:10px;opacity:.7}
 
 /* progress card */
-.progress{margin-top:20px;padding:16px;border-radius:20px;background:var(--surface);display:grid;gap:10px}
-.progress .row{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
-.progress b{font-family:var(--display);font-size:28px;font-weight:900;font-variant-numeric:tabular-nums}
-.progress small{color:var(--muted);font-size:14px}
 .bar{height:10px;border-radius:99px;background:var(--surface-2);overflow:hidden}
 .bar i{display:block;height:100%;width:0;background:var(--grad);border-radius:inherit;transition:width .5s cubic-bezier(.2,.8,.2,1)}
 .vibe{font-weight:600;color:var(--fg)}
@@ -169,13 +165,97 @@ button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px soli
 .btn.wa{background:#25d366;color:#05210f}
 .btn.ghost{background:var(--surface-2);color:var(--fg)}
 
+/* ===== Premium layer ===== */
+@property --a{syntax:"<angle>";inherits:false;initial-value:0deg}
+.aurora{position:fixed;inset:0;z-index:-2;overflow:hidden;pointer-events:none;background:var(--bg)}
+.aurora i{position:absolute;width:70vmax;height:70vmax;border-radius:50%;filter:blur(90px);opacity:.38;animation:drift 22s ease-in-out infinite alternate}
+.aurora i:nth-child(1){background:var(--pink);top:-30vmax;left:-25vmax}
+.aurora i:nth-child(2){background:#7b2dff;top:20vh;right:-35vmax;animation-duration:28s;opacity:.32}
+.aurora i:nth-child(3){background:var(--cyan);bottom:-40vmax;left:-10vmax;animation-duration:34s;opacity:.18}
+@keyframes drift{to{transform:translate(8vmax,6vmax) scale(1.15)}}
+.grain{position:fixed;inset:-50%;z-index:-1;pointer-events:none;opacity:.07;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");animation:grain 1.2s steps(4) infinite}
+@keyframes grain{25%{transform:translate(-3%,2%)}50%{transform:translate(2%,-4%)}75%{transform:translate(-1%,3%)}}
+body{background:transparent}
+html{background:var(--bg)}
+
+.logo span{background:linear-gradient(90deg,var(--pink),#b23cff,var(--cyan),var(--yellow),var(--pink));background-size:300% 100%;-webkit-background-clip:text;background-clip:text;animation:shine 6s linear infinite}
+@keyframes shine{to{background-position:300% 0}}
+.chip{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(10px)}
+.chip.streak{box-shadow:0 0 18px -4px rgba(255,252,0,.45)}
+
+.avatar{animation:spin 8s linear infinite;background:conic-gradient(var(--pink),#b23cff,var(--cyan),var(--yellow),var(--pink))}
+.avatar div{animation:spin 8s linear infinite reverse}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hello h1{font-size:24px}
+
+.glass,.post,.level,.wday,.printinfo{background:linear-gradient(rgba(25,22,36,.72),rgba(25,22,36,.72)) padding-box,linear-gradient(150deg,rgba(255,255,255,.22),rgba(255,255,255,.03) 40%,rgba(255,255,255,.1)) border-box;border:1px solid transparent;backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);box-shadow:0 18px 40px -22px rgba(0,0,0,.9)}
+
+.story.today .ring{background:conic-gradient(from var(--a),var(--pink),#b23cff,var(--cyan),var(--yellow),var(--pink));animation:rot 3s linear infinite}
+.story.today.done .ring,.story.today .ring{box-shadow:0 0 22px -4px rgba(254,44,85,.7)}
+@keyframes rot{to{--a:360deg}}
+.story.done .ring div{background:linear-gradient(135deg,#2a2140,#13202a);color:var(--cyan)}
+
+/* hero ring */
+.hero{margin-top:20px;padding:18px;border-radius:28px;display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center}
+.ringbig{position:relative;width:132px;aspect-ratio:1;max-width:100%}
+.ringbig svg{width:100%;height:100%;transform:rotate(-90deg);overflow:visible}
+.ringbig circle{fill:none;stroke-width:11;stroke-linecap:round}
+.ringbig .trk{stroke:rgba(255,255,255,.08)}
+.ringbig .val{stroke:url(#rg);transition:stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1);filter:drop-shadow(0 0 8px rgba(178,60,255,.75))}
+.ringbig .center{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.ringbig b{font-family:var(--display);font-weight:900;font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
+.ringbig small{color:var(--muted);font-weight:700;font-size:13px;margin-top:4px;font-variant-numeric:tabular-nums}
+.hero-side{display:grid;gap:8px;min-width:0}
+.eyebrow{font-family:var(--display);font-size:10.5px;letter-spacing:.18em;color:var(--cyan);font-weight:700}
+.hero .vibe{font-family:var(--display);font-weight:700;font-size:16px;line-height:1.25;text-wrap:balance}
+.hero-side small{color:var(--muted);font-size:13px}
+.share{background:linear-gradient(90deg,rgba(254,44,85,.18),rgba(37,244,238,.14));border:1px solid rgba(255,255,255,.14);font-size:14px;padding:11px 12px;margin-top:4px}
+.hero.full .ringbig .val{animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{50%{filter:drop-shadow(0 0 16px rgba(37,244,238,.95))}}
+@media (max-width:380px){.hero{grid-template-columns:1fr;justify-items:center;text-align:center}}
+
+/* posts */
+.post{border-radius:26px;position:relative;overflow:visible}
+.ic{box-shadow:0 0 0 3px rgba(255,255,255,.06),0 8px 22px -8px currentColor}
+.post.full{background:linear-gradient(rgba(25,22,36,.8),rgba(25,22,36,.8)) padding-box,conic-gradient(from var(--a),var(--pink),#b23cff,var(--cyan),var(--yellow),var(--pink)) border-box;border:2px solid transparent;animation:rot 4s linear infinite}
+.post.full .post-h h2::after{content:"DONE";display:inline-block;margin-left:8px;padding:2px 7px;border-radius:6px;font-size:10px;letter-spacing:.12em;vertical-align:3px;background:var(--yellow);color:#000;transform:rotate(-6deg)}
+.item{transition:background .2s,transform .15s}
+.item:active{transform:scale(.98)}
+.box{position:relative;border-color:rgba(255,255,255,.22)}
+.item[aria-checked="true"] .box{box-shadow:0 0 16px -2px rgba(254,44,85,.8)}
+.burst{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;pointer-events:none;animation:burst .6s ease-out forwards}
+@keyframes burst{from{transform:rotate(var(--r)) translateY(0) scale(1);opacity:1}to{transform:rotate(var(--r)) translateY(-26px) scale(.3);opacity:0}}
+.note textarea{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.12)}
+.weekend{border-color:rgba(255,255,255,.18);background:rgba(25,22,36,.5);backdrop-filter:blur(14px)}
+
+/* holo level card */
+.level{border-radius:26px;position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(254,44,85,.22),rgba(123,45,255,.22) 45%,rgba(37,244,238,.18)) padding-box,linear-gradient(150deg,rgba(255,255,255,.4),rgba(255,255,255,.05)) border-box}
+.level::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.22) 50%,transparent 65%);transform:translateX(-100%);animation:sweep 4.5s ease-in-out infinite;pointer-events:none}
+@keyframes sweep{60%,100%{transform:translateX(100%)}}
+.level .lv{font-size:26px}
+.badge{background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.12);color:rgba(245,243,250,.78)}
+#lvHint{color:rgba(245,243,250,.8)!important}
+.badge.on{border-color:transparent;box-shadow:0 0 14px -3px rgba(255,252,0,.7)}
+
+/* floating pill nav */
+.nav{left:50%;right:auto;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(360px,calc(100% - 32px));border-radius:999px;padding:6px;border:1px solid rgba(255,255,255,.14);background:rgba(20,18,30,.7);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);box-shadow:0 14px 40px -12px rgba(0,0,0,.9)}
+.nav button{border-radius:999px;flex-direction:row;justify-content:center;gap:6px;font-size:13px;padding:10px 8px}
+.nav button svg{width:20px;height:20px}
+.nav button[aria-selected="true"]{background:linear-gradient(90deg,var(--pink),#b23cff);color:#fff;box-shadow:0 6px 20px -6px rgba(254,44,85,.8)}
+.nav button[aria-selected="true"] svg{color:#fff}
+.nav button:not([aria-selected="true"]) span{display:none}
+.toast{background:linear-gradient(90deg,var(--pink),#b23cff,var(--cyan));color:#fff;box-shadow:0 10px 30px -8px rgba(178,60,255,.8)}
+.party-card .big{font-size:64px;animation:bob 1.6s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(-8px) rotate(-6deg)}}
+.sheet-share .panel{background:rgba(25,22,36,.92);backdrop-filter:blur(20px);border-top:1px solid rgba(255,255,255,.14)}
+
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
 /* ===== PRINT: only the black & white weekly sheet ===== */
 @page{size:A4 portrait;margin:10mm}
 @media print{
-  body{background:#fff!important;color:#000!important}
-  .app>*:not(#viewPrint),.nav,.toast,.party,#confetti,.printinfo,.sheet-share{display:none!important}
+  html,body{background:#fff!important;color:#000!important}
+  .app>*:not(#viewPrint),.aurora,.grain,.nav,.toast,.party,#confetti,.printinfo,.sheet-share{display:none!important}
   .app{max-width:none;padding:0}
   #viewPrint{display:block!important}
   .paper-wrap{overflow:visible;margin:0}
@@ -187,6 +267,8 @@ button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px soli
 </head>
 <body>
 
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+<div class="grain" aria-hidden="true"></div>
 <div class="app">
   <header class="top">
     <div class="logo" data-t="Ready Check"><span>Ready Check</span></div>
@@ -206,11 +288,18 @@ button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px soli
 
     <nav class="stories" id="stories" aria-label="Wochentage"></nav>
 
-    <div class="progress">
-      <div class="row"><b id="progNum">0/0</b><small id="progLabel">erledigt</small></div>
-      <div class="bar"><i id="progBar"></i></div>
+    <div class="hero glass" id="hero">
+      <div class="ringbig">
+        <svg viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fe2c55"/><stop offset=".55" stop-color="#b23cff"/><stop offset="1" stop-color="#25f4ee"/></linearGradient></defs>
+          <circle class="trk" cx="60" cy="60" r="52"/><circle class="val" id="progRing" cx="60" cy="60" r="52" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/></svg>
+        <div class="center"><b id="progPct">0%</b><small id="progNum">0/0</small></div>
+      </div>
+      <div class="hero-side">
+      <div class="eyebrow">TAGES-CHECK</div>
       <div class="vibe" id="vibe"></div>
+      <small id="progLabel"></small>
       <button type="button" class="share" id="shareBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7Z"/></svg>Status an Papa senden</button>
+      </div>
     </div>
 
     <div class="feed" id="feed"></div>
@@ -244,12 +333,12 @@ button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px soli
 </div>
 
 <nav class="nav" role="tablist" aria-label="Ansicht">
-  <button type="button" role="tab" aria-selected="true" data-view="viewToday" id="tabToday">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>Heute</button>
-  <button type="button" role="tab" aria-selected="false" data-view="viewWeek" id="tabWeek">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1 3 4 4.5 4 8.5a4 4 0 0 1-8 0c0-1.6.7-2.6 1.5-3.5.3 1.3 1 2 1.8 2.2C11 8 11 5.5 12 3Z"/><path d="M6 21h12"/></svg>Woche</button>
-  <button type="button" role="tab" aria-selected="false" data-view="viewPrint" id="tabPrint">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8V3h10v5"/><rect x="3" y="8" width="18" height="9" rx="2"/><path d="M7 14h10v7H7z"/></svg>Drucken</button>
+  <button type="button" role="tab" aria-selected="true" data-view="viewToday" id="tabToday" aria-label="Heute">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg><span>Heute</span></button>
+  <button type="button" role="tab" aria-selected="false" data-view="viewWeek" id="tabWeek" aria-label="Woche">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1 3 4 4.5 4 8.5a4 4 0 0 1-8 0c0-1.6.7-2.6 1.5-3.5.3 1.3 1 2 1.8 2.2C11 8 11 5.5 12 3Z"/><path d="M6 21h12"/></svg><span>Woche</span></button>
+  <button type="button" role="tab" aria-selected="false" data-view="viewPrint" id="tabPrint" aria-label="Drucken">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8V3h10v5"/><rect x="3" y="8" width="18" height="9" rx="2"/><path d="M7 14h10v7H7z"/></svg><span>Drucken</span></button>
 </nav>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -265,10 +354,10 @@ button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px soli
 <div class="sheet-share" id="sharePanel" hidden>
   <div class="panel" role="dialog" aria-labelledby="shareTitle">
     <h3 id="shareTitle">Status senden</h3>
-    <p>Per WhatsApp schicken oder kopieren und bei Snapchat &amp; Co. einfügen.</p>
+    <p>Geht per WhatsApp direkt an Papa. Oder kopieren und woanders einfügen.</p>
     <textarea id="shareText" readonly aria-label="Nachricht"></textarea>
     <div class="acts">
-      <a class="btn wa" id="shareWa" href="#" target="_blank" rel="noopener">WhatsApp</a>
+      <a class="btn wa" id="shareWa" href="#" target="_blank" rel="noopener">WhatsApp an Papa</a>
       <button type="button" class="btn ghost" id="shareCopy">Kopieren</button>
     </div>
     <button type="button" class="chip" id="shareClose" style="justify-self:center">Schließen</button>
@@ -377,7 +466,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px soli
     var h="";
     for (var i=0;i<7;i++){
       var d=addDays(weekStart,i), st=stats(d), k=keyOf(d);
-      var cls="story"+(st.full?" done":"")+(k===keyOf(selected)?" sel":"");
+      var cls="story"+(st.full?" done":"")+(k===keyOf(today)?" today":"")+(k===keyOf(selected)?" sel":"");
       h+='<button type="button" class="'+cls+'" data-i="'+i+'" aria-label="'+DAY_LONG[i]+', '+st.n+' von '+st.total+' erledigt">'+
         (k===keyOf(today)?'<span class="live">HEUTE</span>':'')+
         '<span class="ring" style="--p:'+st.pct+'"><div>'+(st.full?"✓":d.getDate())+'</div></span>'+
@@ -399,9 +488,11 @@ button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px soli
   }
   function renderProgress(){
     var st=stats(selected);
-    $("progNum").textContent=st.n+"/"+st.total;
-    $("progLabel").textContent=st.pct+" % erledigt";
-    $("progBar").style.width=st.pct+"%";
+    $("progNum").textContent=st.n+" von "+st.total;
+    $("progPct").textContent=st.pct+"%";
+    $("progRing").style.strokeDashoffset=100-st.pct;
+    $("hero").classList.toggle("full",st.full);
+    $("progLabel").textContent=st.full?"Morgen kann kommen.":"Noch "+(st.total-st.n)+" offen für "+(keyOf(selected)===keyOf(today)?"heute":DAY_LONG[selected.getDay()]);
     $("vibe").textContent=vibeFor(st);
     $("streak").textContent=streak();
     $("xp").textContent=xp();
@@ -446,6 +537,8 @@ button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px soli
     save();
     if (!was){
       try{ navigator.vibrate && navigator.vibrate(15); }catch(e){}
+      var bx=b.querySelector(".box"), cols=["#fe2c55","#25f4ee","#fffc00","#b23cff"];
+      for (var q=0;q<10;q++){ var dot=document.createElement("i"); dot.className="burst"; dot.style.setProperty("--r",(q*36)+"deg"); dot.style.background=cols[q%4]; bx.appendChild(dot); setTimeout(function(d){ return function(){ d.remove(); }; }(dot),650); }
       var f=document.createElement("span"); f.className="float"; f.textContent="+10 XP"; b.appendChild(f);
       setTimeout(function(){ f.remove(); },900);
     }
@@ -511,7 +604,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px soli
   $("shareBtn").onclick=function(){
     var t=statusText();
     $("shareText").value=t;
-    $("shareWa").href="https://wa.me/?text="+encodeURIComponent(t);
+    $("shareWa").href="https://wa.me/491604323105?text="+encodeURIComponent(t);
     $("sharePanel").hidden=false;
   };
   $("shareClose").onclick=function(){ $("sharePanel").hidden=true; };
