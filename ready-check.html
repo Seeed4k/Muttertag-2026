@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ready Check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=Figtree:wght@400;600;800&display=swap">
+<style>
+/* Layout: phone-first vertical feed — story strip of days on top, task "posts" below, bottom tab bar like a social app. Print: pure black/white A4 weekly sheet. */
+:root{
+  --bg:#0b0a12;
+  --surface:#17151f;
+  --surface-2:#221f2d;
+  --line:#2f2b3d;
+  --fg:#f5f3fa;
+  --muted:#9d97b0;
+  --pink:#fe2c55;
+  --cyan:#25f4ee;
+  --yellow:#fffc00;
+  --grad:linear-gradient(120deg,var(--pink),#b23cff 55%,var(--cyan));
+  --display:"Unbounded","Arial Black",system-ui,sans-serif;
+  --body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.4;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.app{max-width:520px;margin:0 auto;padding-inline:16px;padding-block:14px 110px}
+
+/* top bar */
+.top{display:flex;align-items:center;gap:12px}
+.logo{font-family:var(--display);font-weight:900;font-size:20px;letter-spacing:-.02em;position:relative}
+.logo span{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.logo::before,.logo::after{content:attr(data-t);position:absolute;inset:0;z-index:-1}
+.logo::before{color:var(--cyan);transform:translate(-2px,-1px)}
+.logo::after{color:var(--pink);transform:translate(2px,1px)}
+.top .sp{flex:1}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:999px;background:var(--surface-2);font-weight:800;font-size:14px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.chip.streak{color:var(--yellow)}
+.chip.xp{color:var(--cyan)}
+
+.hello{margin-top:18px;display:flex;align-items:center;gap:12px}
+.avatar{width:52px;height:52px;border-radius:50%;padding:3px;background:var(--grad);flex:none}
+.avatar div{width:100%;height:100%;border-radius:50%;background:var(--surface);display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:20px}
+.hello h1{margin:0;font-family:var(--display);font-weight:700;font-size:22px;line-height:1.15;text-wrap:balance}
+.hello p{margin:2px 0 0;color:var(--muted);font-size:14px}
+#nameInput{font:inherit;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:2px 8px;width:9em;font-family:var(--display);font-size:20px}
+.edit{color:var(--muted);font-size:13px;text-decoration:underline;text-underline-offset:3px;margin-left:4px}
+
+/* story strip */
+.stories{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:20px}
+.story{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:12px;color:var(--muted);font-weight:600;position:relative}
+.ring{width:100%;max-width:56px;aspect-ratio:1;border-radius:50%;padding:3px;background:conic-gradient(var(--pink),#b23cff,var(--cyan) calc(var(--p)*1%),var(--line) 0);transition:transform .2s}
+.ring div{width:100%;height:100%;border-radius:50%;background:var(--bg);display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:15px;color:var(--fg)}
+.story.done .ring div{background:var(--surface-2)}
+.story.sel .ring{transform:scale(1.08);box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--fg)}
+.story.sel{color:var(--fg)}
+.live{position:absolute;top:-4px;left:50%;transform:translateX(-50%);background:var(--pink);color:#fff;font-size:9px;font-weight:800;letter-spacing:.08em;padding:1px 5px;border-radius:4px;z-index:1}
+.story .we{font-size:10px;opacity:.7}
+
+/* progress card */
+.progress{margin-top:20px;padding:16px;border-radius:20px;background:var(--surface);display:grid;gap:10px}
+.progress .row{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.progress b{font-family:var(--display);font-size:28px;font-weight:900;font-variant-numeric:tabular-nums}
+.progress small{color:var(--muted);font-size:14px}
+.bar{height:10px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--grad);border-radius:inherit;transition:width .5s cubic-bezier(.2,.8,.2,1)}
+.vibe{font-weight:600;color:var(--fg)}
+
+/* posts */
+.feed{display:grid;gap:16px;margin-top:16px}
+.post{border-radius:22px;background:var(--surface);overflow:hidden}
+.post-h{display:flex;align-items:center;gap:12px;padding:14px 16px 10px}
+.ic{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;flex:none}
+.ic svg{width:22px;height:22px}
+.post-h h2{margin:0;font-family:var(--display);font-size:16px;font-weight:700}
+.post-h .handle{color:var(--muted);font-size:13px}
+.post-h .cnt{margin-left:auto;font-weight:800;font-variant-numeric:tabular-nums;font-size:14px;padding:5px 10px;border-radius:99px;background:var(--surface-2)}
+.post.full .cnt{background:var(--grad);color:#fff}
+.items{list-style:none;margin:0;padding:0 8px 8px}
+.item{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:11px 8px;border-radius:14px;position:relative}
+.item:hover{background:var(--surface-2)}
+.box{width:28px;height:28px;border-radius:50%;border:2.5px solid var(--line);flex:none;display:grid;place-items:center;transition:.2s}
+.box svg{width:16px;height:16px;opacity:0;transform:scale(.4);transition:.25s cubic-bezier(.3,1.6,.5,1)}
+.item[aria-checked="true"] .box{border-color:transparent;background:var(--grad)}
+.item[aria-checked="true"] .box svg{opacity:1;transform:scale(1)}
+.item .t{display:block;font-weight:600}
+.item .h{display:block;color:var(--muted);font-size:13px}
+.item[aria-checked="true"] .t{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--pink);text-decoration-thickness:2px}
+.txt{min-width:0}
+.float{position:absolute;right:14px;top:8px;font-weight:900;color:var(--cyan);pointer-events:none;animation:up .9s ease-out forwards;font-family:var(--display);font-size:14px}
+@keyframes up{to{transform:translateY(-28px);opacity:0}}
+.note{margin:0 16px 16px;display:grid;gap:6px}
+.note label{font-size:13px;color:var(--muted);font-weight:600}
+.note textarea{width:100%;min-height:62px;resize:vertical;font:inherit;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.weekend{padding:18px;border-radius:22px;border:2px dashed var(--line);color:var(--muted);text-align:center;font-weight:600}
+.weekend b{display:block;font-family:var(--display);color:var(--fg);font-size:17px;margin-bottom:4px}
+
+/* week view */
+.sec-title{font-family:var(--display);font-size:20px;margin:22px 0 12px}
+.weeklist{display:grid;gap:10px}
+.wday{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;padding:12px 14px;border-radius:16px;background:var(--surface)}
+.wday b{font-family:var(--display);font-size:15px}
+.wday small{color:var(--muted);font-variant-numeric:tabular-nums;font-weight:700}
+.wday.today{box-shadow:inset 0 0 0 2px var(--pink)}
+.level{padding:18px;border-radius:22px;background:var(--surface);display:grid;gap:10px;margin-top:16px}
+.level .lv{font-family:var(--display);font-size:24px;font-weight:900}
+.level .lv span{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.badges{display:flex;flex-wrap:wrap;gap:8px}
+.badge{padding:7px 12px;border-radius:99px;background:var(--surface-2);font-size:13px;font-weight:700;color:var(--muted)}
+.badge.on{color:var(--bg);background:var(--yellow)}
+.reset{margin-top:22px;color:var(--muted);font-size:13px;text-decoration:underline}
+
+/* print tab (screen preview) */
+.printinfo{padding:16px;border-radius:18px;background:var(--surface);color:var(--muted);font-size:14px;margin-top:18px}
+.printinfo b{color:var(--fg)}
+.paper-wrap{margin-top:16px;overflow-x:auto;border-radius:12px}
+.sheet{background:#fff;color:#000;font-family:var(--body);padding:22px;min-width:600px}
+.sheet h2{margin:0;font-family:var(--display);font-weight:900;font-size:26px;letter-spacing:-.02em;line-height:1}
+.sheet .sub{display:flex;flex-wrap:wrap;gap:6px 26px;margin:12px 0 14px;font-size:13px;font-weight:600}
+.sheet .sub span{display:inline-block;border-bottom:1.5px solid #000;min-width:130px;height:1.1em;vertical-align:bottom}
+.sheet .tagline{font-size:12px;margin-top:6px}
+.sheet table{width:100%;border-collapse:collapse;font-size:12.5px}
+.sheet th,.sheet td{border:1.5px solid #000;padding:5px 6px}
+.sheet thead th{font-family:var(--display);font-size:12px;background:#000;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.sheet thead th:first-child{text-align:left}
+.sheet td.d{text-align:center;width:9.5%;vertical-align:middle}
+.sheet .cb{display:inline-block;width:16px;height:16px;border:2px solid #000;border-radius:3px}
+.sheet .na{display:inline-block;width:14px;border-top:1.5px solid #000;vertical-align:middle;opacity:.55}
+.sheet tr.cat td{font-family:var(--display);font-weight:700;font-size:13px;padding-top:8px;border-bottom:2.5px solid #000}
+.sheet tr.cat td small{font-family:var(--body);font-weight:600;font-size:11px;margin-left:6px}
+.sheet td .hint{display:block;font-size:10.5px;margin-top:1px}
+.sheet tr.total td{font-weight:800;border-top:3px solid #000}
+.sheet .star{font-size:18px;line-height:1}
+.sheet .foot{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.sheet .fbox{border:1.5px solid #000;border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700}
+.sheet .fbox i{display:block;border-bottom:1px solid #000;height:20px}
+.sheet .legend{font-size:11px;margin-top:10px}
+
+/* bottom nav */
+.nav{position:fixed;left:0;right:0;bottom:0;background:rgba(11,10,18,.92);backdrop-filter:blur(12px);border-top:1px solid var(--line);padding:8px 16px calc(8px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;gap:6px;z-index:5}
+.nav button{flex:1;max-width:160px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:12px;font-weight:700;color:var(--muted);padding:6px;border-radius:12px}
+.nav button svg{width:24px;height:24px}
+.nav button[aria-selected="true"]{color:var(--fg)}
+.nav button[aria-selected="true"] svg{color:var(--pink)}
+
+/* toast + celebration */
+.toast{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top,0px));transform:translate(-50%,-140%);background:var(--fg);color:var(--bg);font-weight:800;padding:10px 18px;border-radius:999px;transition:transform .35s cubic-bezier(.3,1.4,.5,1);z-index:20;white-space:nowrap;font-size:15px}
+.toast.show{transform:translate(-50%,0)}
+.party{position:fixed;inset:0;background:rgba(11,10,18,.8);display:grid;place-items:center;z-index:15;padding:24px}
+.party-card{text-align:center;max-width:340px;padding:28px 22px;border-radius:28px;background:var(--surface);border:2px solid transparent;background-image:linear-gradient(var(--surface),var(--surface)),var(--grad);background-origin:border-box;background-clip:padding-box,border-box}
+.party-card .big{font-size:56px;line-height:1}
+.party-card h3{font-family:var(--display);font-size:26px;margin:12px 0 6px}
+.party-card p{color:var(--muted);margin:0 0 18px}
+.btn{display:inline-block;background:var(--grad);color:#fff;font-weight:800;padding:12px 26px;border-radius:999px}
+#confetti{position:fixed;inset:0;pointer-events:none;z-index:16}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ===== PRINT: only the black & white weekly sheet ===== */
+@page{size:A4 portrait;margin:10mm}
+@media print{
+  body{background:#fff!important;color:#000!important}
+  .app>*:not(#viewPrint),.nav,.toast,.party,#confetti,.printinfo{display:none!important}
+  .app{max-width:none;padding:0}
+  #viewPrint{display:block!important}
+  .paper-wrap{overflow:visible;margin:0}
+  .sheet{min-width:0;padding:0}
+  .sheet td{height:9.5mm}
+  .sheet tr{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="top">
+    <div class="logo" data-t="Ready Check"><span>Ready Check</span></div>
+    <div class="sp"></div>
+    <span class="chip streak" title="Tage in Folge alles erledigt">🔥 <span id="streak">0</span></span>
+    <span class="chip xp" title="Erfahrungspunkte">⚡ <span id="xp">0</span> XP</span>
+  </header>
+
+  <section id="viewToday">
+    <div class="hello">
+      <div class="avatar"><div id="initial">?</div></div>
+      <div class="txt">
+        <h1 id="helloLine">Hey!</h1>
+        <p id="dayLine"></p>
+      </div>
+    </div>
+
+    <nav class="stories" id="stories" aria-label="Wochentage"></nav>
+
+    <div class="progress">
+      <div class="row"><b id="progNum">0/0</b><small id="progLabel">erledigt</small></div>
+      <div class="bar"><i id="progBar"></i></div>
+      <div class="vibe" id="vibe"></div>
+    </div>
+
+    <div class="feed" id="feed"></div>
+  </section>
+
+  <section id="viewWeek" hidden>
+    <div class="level">
+      <div class="lv">Level <span id="lvNum">1</span> · <span id="lvName">Rookie</span></div>
+      <div class="bar"><i id="lvBar"></i></div>
+      <small style="color:var(--muted)" id="lvHint"></small>
+      <div class="badges" id="badges"></div>
+    </div>
+    <h2 class="sec-title">Diese Woche</h2>
+    <div class="weeklist" id="weeklist"></div>
+    <button class="reset" id="resetBtn" type="button">Alle Haken &amp; XP zurücksetzen</button>
+    <div id="resetConfirm" hidden style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <span>Wirklich alles löschen?</span>
+      <button class="btn" id="resetYes" type="button" style="padding:8px 18px">Ja, löschen</button>
+      <button class="chip" id="resetNo" type="button">Abbrechen</button>
+    </div>
+  </section>
+
+  <section id="viewPrint" hidden>
+    <div class="printinfo">
+      <b>Zum Ausdrucken:</b> Diese Seite im Browser öffnen (Chrome, Safari, Edge) und <b>Strg + P</b> drücken (Mac: <b>⌘ + P</b>, Handy: Teilen → Drucken). Gedruckt wird nur der Wochenplan, in Schwarz-Weiß auf eine A4-Seite.
+    </div>
+    <div class="paper-wrap">
+      <div class="sheet" id="sheet"></div>
+    </div>
+  </section>
+</div>
+
+<nav class="nav" role="tablist" aria-label="Ansicht">
+  <button type="button" role="tab" aria-selected="true" data-view="viewToday" id="tabToday">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>Heute</button>
+  <button type="button" role="tab" aria-selected="false" data-view="viewWeek" id="tabWeek">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1 3 4 4.5 4 8.5a4 4 0 0 1-8 0c0-1.6.7-2.6 1.5-3.5.3 1.3 1 2 1.8 2.2C11 8 11 5.5 12 3Z"/><path d="M6 21h12"/></svg>Woche</button>
+  <button type="button" role="tab" aria-selected="false" data-view="viewPrint" id="tabPrint">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8V3h10v5"/><rect x="3" y="8" width="18" height="9" rx="2"/><path d="M7 14h10v7H7z"/></svg>Drucken</button>
+</nav>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="party" id="party" hidden>
+  <div class="party-card">
+    <div class="big">🏆</div>
+    <h3>Ready für morgen!</h3>
+    <p id="partyText">Alles erledigt. +50 Bonus-XP für dich.</p>
+    <button class="btn" id="partyClose" type="button">Nice 😎</button>
+  </div>
+</div>
+<canvas id="confetti"></canvas>
+
+<script>
+(function(){
+  // So=0 … Sa=6. Schul-Aufgaben nur Sonntag bis Donnerstag (Vorbereitung für den nächsten Schultag).
+  var SCHOOL = [0,1,2,3,4];
+  var ALL = [0,1,2,3,4,5,6];
+  var CATS = [
+    { id:"bag", title:"Schultasche", handle:"@ready.for.school", days:SCHOOL, color:"var(--pink)",
+      icon:'<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6"/><rect x="5" y="6" width="14" height="15" rx="4"/><path d="M5 13h14M10 13v2h4v-2"/></svg>',
+      tasks:[
+        { id:"bag-clean", t:"Tasche ausgeräumt & aufgeräumt", h:"Krümel raus, falls nötig auswischen" },
+        { id:"bag-pack",  t:"Für morgen gepackt", h:"Stundenplan checken: Bücher, Hefte, Mäppchen" },
+        { id:"bag-sport", t:"Sportsachen?", h:"Morgen Sport? Dann Sporttasche bereit" },
+        { id:"bag-box",   t:"Brotdose gespült", h:"Und Trinkflasche gleich mit" },
+        { id:"bag-mat",   t:"Material gecheckt", h:"Fehlt was oder muss was besorgt werden?", note:true }
+      ]},
+    { id:"fit", title:"Outfit", handle:"@fit.check", days:SCHOOL, color:"#b23cff",
+      icon:'<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 4 5.5 2.5 10l3.5 1.5V21h12v-9.5l3.5-1.5L20 5.5 15 3a3 3 0 0 1-6 0Z"/></svg>',
+      tasks:[
+        { id:"fit-lay", t:"Kleidung für morgen bereitgelegt", h:"Komplett, inklusive Socken und Unterwäsche" }
+      ]},
+    { id:"room", title:"Zimmer", handle:"@clean.room.era", days:ALL, color:"#0fb5b0",
+      icon:'<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6M3 18h18M3 18v2M21 18v2"/><path d="M6 10V7a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v3"/></svg>',
+      tasks:[
+        { id:"room-floor", t:"Boden frei", h:"Alles vom Boden aufgeräumt" },
+        { id:"room-wash",  t:"Wäsche weggeräumt", h:"In den Schrank oder in den Wäschekorb" },
+        { id:"room-dish",  t:"Geschirr in die Küche gebracht", h:"Teller, Becher, Gläser" },
+        { id:"room-stair", t:"Treppe frei", h:"Nichts liegt auf den Stufen" },
+        { id:"room-vac",   t:"Staubsaugen", h:"Zimmerboden einmal durchsaugen", days:[3,6] }
+      ]}
+  ];
+  var DAY_SHORT = ["So","Mo","Di","Mi","Do","Fr","Sa"];
+  var DAY_LONG = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
+  var HYPE = ["Slay! 💅","W! 🏆","Läuft bei dir 😎","Ehrenmove 🙌","Lowkey stolz auf dich","Main Character Energy ✨","No cap: stark 💯","GOAT-Verhalten 🐐","Respekt 🔥","Sheesh! 🥶","Aura +1000 ✨"];
+  var LEVELS = ["Rookie","Rising Star","Pro","Influencer","Legend","GOAT"];
+  var KEY = "readycheck:v1";
+
+  var S = { name:"", done:{}, notes:{}, bonus:{} };
+  try { var raw = localStorage.getItem(KEY); if (raw) { var p = JSON.parse(raw); S.name=p.name||""; S.done=p.done||{}; S.notes=p.notes||{}; S.bonus=p.bonus||{}; } } catch(e){}
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){} }
+
+  function pad(n){ return (n<10?"0":"")+n; }
+  function keyOf(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+  function addDays(d,n){ var x=new Date(d); x.setDate(x.getDate()+n); return x; }
+  var today = new Date(); today.setHours(12,0,0,0);
+  var weekStart = addDays(today, -today.getDay());
+  var selected = new Date(today);
+
+  function tasksFor(dow){
+    var out=[];
+    CATS.forEach(function(c){
+      if (c.days.indexOf(dow)<0) return;
+      var ts = c.tasks.filter(function(t){ return !t.days || t.days.indexOf(dow)>=0; });
+      if (ts.length) out.push({cat:c, tasks:ts});
+    });
+    return out;
+  }
+  function stats(d){
+    var k=keyOf(d), done=S.done[k]||{}, total=0, n=0;
+    tasksFor(d.getDay()).forEach(function(g){ g.tasks.forEach(function(t){ total++; if(done[t.id]) n++; }); });
+    return {n:n,total:total,pct: total? Math.round(n/total*100):0, full: total>0 && n===total};
+  }
+  function xp(){
+    var x=0;
+    Object.keys(S.done).forEach(function(k){ Object.keys(S.done[k]).forEach(function(id){ if(S.done[k][id]) x+=10; }); });
+    Object.keys(S.bonus).forEach(function(k){ if(S.bonus[k]) x+=50; });
+    return x;
+  }
+  function streak(){
+    var d=new Date(today), c=0;
+    if (!stats(d).full) d=addDays(d,-1);
+    while (c<400 && stats(d).full){ c++; d=addDays(d,-1); }
+    return c;
+  }
+  function esc(s){ return String(s).replace(/[&<>"]/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m];}); }
+  var $ = function(id){ return document.getElementById(id); };
+
+  /* ---------- header ---------- */
+  var editing=false;
+  function renderHello(){
+    var nm = S.name.trim();
+    $("initial").textContent = nm ? nm[0].toUpperCase() : "?";
+    if (editing){
+      $("helloLine").innerHTML = 'Hey <input id="nameInput" maxlength="20" placeholder="Dein Name" value="'+esc(nm)+'">';
+      var inp=$("nameInput"); inp.focus();
+      var done=function(){ S.name=inp.value.trim(); editing=false; save(); renderHello(); };
+      inp.addEventListener("blur",done);
+      inp.addEventListener("keydown",function(e){ if(e.key==="Enter") inp.blur(); });
+    } else {
+      $("helloLine").innerHTML = (nm ? "Hey "+esc(nm)+" 👋" : "Hey du 👋")+' <button class="edit" id="editName" type="button">'+(nm?"ändern":"Name eintragen")+'</button>';
+      $("editName").onclick=function(){ editing=true; renderHello(); };
+    }
+    var isToday = keyOf(selected)===keyOf(today);
+    var dow=selected.getDay();
+    var schoolTomorrow = SCHOOL.indexOf(dow)>=0;
+    $("dayLine").textContent = (isToday?"Heute · ":"")+DAY_LONG[dow]+", "+selected.getDate()+"."+(selected.getMonth()+1)+"."+(schoolTomorrow?" · morgen ist Schule":" · morgen schulfrei");
+  }
+
+  /* ---------- stories ---------- */
+  function renderStories(){
+    var h="";
+    for (var i=0;i<7;i++){
+      var d=addDays(weekStart,i), st=stats(d), k=keyOf(d);
+      var cls="story"+(st.full?" done":"")+(k===keyOf(selected)?" sel":"");
+      h+='<button type="button" class="'+cls+'" data-i="'+i+'" aria-label="'+DAY_LONG[i]+', '+st.n+' von '+st.total+' erledigt">'+
+        (k===keyOf(today)?'<span class="live">HEUTE</span>':'')+
+        '<span class="ring" style="--p:'+st.pct+'"><div>'+(st.full?"✓":d.getDate())+'</div></span>'+
+        DAY_SHORT[i]+'</button>';
+    }
+    $("stories").innerHTML=h;
+    $("stories").querySelectorAll(".story").forEach(function(b){
+      b.onclick=function(){ selected=addDays(weekStart,+b.dataset.i); renderToday(); };
+    });
+  }
+
+  /* ---------- progress ---------- */
+  function vibeFor(st){
+    if (st.full) return "Alles erledigt. Du bist ready für morgen 🏆";
+    if (st.n===0) return "Los geht's! Jeder Haken gibt 10 XP ⚡";
+    if (st.pct<50) return "Guter Start, bleib dran 💪";
+    if (st.pct<85) return "Mehr als die Hälfte geschafft 🔥";
+    return "Fast fertig! Nur noch "+(st.total-st.n)+" 👀";
+  }
+  function renderProgress(){
+    var st=stats(selected);
+    $("progNum").textContent=st.n+"/"+st.total;
+    $("progLabel").textContent=st.pct+" % erledigt";
+    $("progBar").style.width=st.pct+"%";
+    $("vibe").textContent=vibeFor(st);
+    $("streak").textContent=streak();
+    $("xp").textContent=xp();
+  }
+
+  /* ---------- feed ---------- */
+  var CHECK='<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
+  function renderFeed(){
+    var dow=selected.getDay(), k=keyOf(selected), done=S.done[k]||{};
+    var h="";
+    tasksFor(dow).forEach(function(g){
+      var n=g.tasks.filter(function(t){return done[t.id];}).length;
+      h+='<article class="post'+(n===g.tasks.length?" full":"")+'"><div class="post-h"><span class="ic" style="background:'+g.cat.color+'">'+g.cat.icon+'</span>'+
+         '<div class="txt"><h2>'+g.cat.title+'</h2><div class="handle">'+g.cat.handle+'</div></div><span class="cnt">'+n+'/'+g.tasks.length+'</span></div><ul class="items">';
+      var hasNote=false;
+      g.tasks.forEach(function(t){
+        if (t.note) hasNote=true;
+        h+='<li><button type="button" class="item" role="checkbox" aria-checked="'+(!!done[t.id])+'" data-id="'+t.id+'">'+
+           '<span class="box">'+CHECK+'</span><span class="txt"><span class="t">'+t.t+'</span><span class="h">'+t.h+'</span></span></button></li>';
+      });
+      h+='</ul>';
+      if (hasNote) h+='<div class="note"><label for="note-'+k+'">Fehlt was? Hier notieren, damit es besorgt werden kann:</label><textarea id="note-'+k+'" placeholder="z. B. Collegeblock A4 kariert, Bastelkleber …">'+esc(S.notes[k]||"")+'</textarea></div>';
+      h+='</article>';
+    });
+    if (SCHOOL.indexOf(dow)<0){
+      h+='<div class="weekend"><b>Wochenende-Modus 😎</b>Morgen ist keine Schule, also haben Schultasche und Outfit heute frei. Nur das Zimmer zählt.</div>';
+    }
+    $("feed").innerHTML=h;
+    $("feed").querySelectorAll(".item").forEach(function(b){ b.onclick=function(){ toggle(b); }; });
+    var ta=$("feed").querySelector("textarea");
+    if (ta) ta.oninput=function(){ S.notes[k]=ta.value; save(); };
+  }
+
+  function toggle(b){
+    var k=keyOf(selected), id=b.dataset.id;
+    S.done[k]=S.done[k]||{};
+    var was=!!S.done[k][id];
+    var before=stats(selected).full;
+    if (was) delete S.done[k][id]; else S.done[k][id]=true;
+    var st=stats(selected);
+    if (!st.full) delete S.bonus[k];
+    save();
+    if (!was){
+      try{ navigator.vibrate && navigator.vibrate(15); }catch(e){}
+      var f=document.createElement("span"); f.className="float"; f.textContent="+10 XP"; b.appendChild(f);
+      setTimeout(function(){ f.remove(); },900);
+    }
+    // update in place so the float animation stays visible
+    b.setAttribute("aria-checked", String(!was));
+    var post=b.closest(".post"), items=post.querySelectorAll(".item"), n=post.querySelectorAll('.item[aria-checked="true"]').length;
+    post.querySelector(".cnt").textContent=n+"/"+items.length;
+    post.classList.toggle("full", n===items.length);
+    renderProgress(); renderStories();
+    if (!was){
+      if (st.full && !before){ S.bonus[k]=true; save(); renderProgress(); celebrate(); }
+      else if (n===items.length) toast(post.querySelector("h2").textContent+" erledigt ✅");
+      else if (Math.random()<.45) toast(HYPE[Math.floor(Math.random()*HYPE.length)]);
+    }
+  }
+
+  var tt;
+  function toast(msg){
+    var t=$("toast"); t.textContent=msg; t.classList.add("show");
+    clearTimeout(tt); tt=setTimeout(function(){ t.classList.remove("show"); },1600);
+  }
+
+  /* ---------- celebration ---------- */
+  function celebrate(){
+    var s=streak();
+    $("partyText").textContent="Alles erledigt. +50 Bonus-XP"+(s>1?" und "+s+" Tage Streak 🔥":"")+".";
+    $("party").hidden=false;
+    confetti();
+  }
+  $("partyClose").onclick=function(){ $("party").hidden=true; };
+  function confetti(){
+    if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    var c=$("confetti"), x=c.getContext("2d"), W=c.width=innerWidth, H=c.height=innerHeight;
+    var cols=["#fe2c55","#25f4ee","#fffc00","#b23cff","#ffffff"], P=[];
+    for (var i=0;i<140;i++) P.push({x:W/2+(Math.random()-.5)*80,y:H*.45,vx:(Math.random()-.5)*14,vy:-Math.random()*14-4,r:Math.random()*6+4,c:cols[i%5],a:Math.random()*6,s:(Math.random()-.5)*.3});
+    var f=0;
+    (function loop(){
+      x.clearRect(0,0,W,H);
+      P.forEach(function(p){ p.vy+=.35; p.vx*=.99; p.x+=p.vx; p.y+=p.vy; p.a+=p.s;
+        x.save(); x.translate(p.x,p.y); x.rotate(p.a); x.fillStyle=p.c; x.fillRect(-p.r/2,-p.r/4,p.r,p.r/2); x.restore(); });
+      if (++f<160) requestAnimationFrame(loop); else x.clearRect(0,0,W,H);
+    })();
+  }
+
+  /* ---------- week view ---------- */
+  function renderWeek(){
+    var X=xp(), lv=Math.floor(X/300), into=X%300;
+    $("lvNum").textContent=lv+1;
+    $("lvName").textContent=LEVELS[Math.min(lv,LEVELS.length-1)];
+    $("lvBar").style.width=(into/300*100)+"%";
+    $("lvHint").textContent=(300-into)+" XP bis Level "+(lv+2)+" · "+X+" XP gesamt";
+    var s=streak(), fullDays=Object.keys(S.bonus).length;
+    var B=[["Erster Tag geschafft",fullDays>=1],["3 Tage Streak",s>=3],["7 Tage Streak",s>=7],["14 Tage Streak",s>=14],["Level 3",lv>=2],["1000 XP",X>=1000]];
+    $("badges").innerHTML=B.map(function(b){return '<span class="badge'+(b[1]?" on":"")+'">'+(b[1]?"★ ":"☆ ")+b[0]+'</span>';}).join("");
+    var h="";
+    for (var i=0;i<7;i++){
+      var d=addDays(weekStart,i), st=stats(d);
+      h+='<div class="wday'+(keyOf(d)===keyOf(today)?" today":"")+'"><b>'+DAY_SHORT[i]+'</b><div class="bar"><i style="width:'+st.pct+'%"></i></div><small>'+(st.full?"✓ ":"")+st.n+'/'+st.total+'</small></div>';
+    }
+    $("weeklist").innerHTML=h;
+  }
+  $("resetBtn").onclick=function(){ $("resetConfirm").hidden=false; };
+  $("resetNo").onclick=function(){ $("resetConfirm").hidden=true; };
+  $("resetYes").onclick=function(){ S.done={}; S.notes={}; S.bonus={}; save(); $("resetConfirm").hidden=true; renderAll(); toast("Alles zurückgesetzt"); };
+
+  /* ---------- print sheet ---------- */
+  function renderSheet(){
+    var h='<h2>READY CHECK · Mein Wochenplan</h2>'+
+      '<div class="tagline">Jeden Abend abhaken, was erledigt ist. Abends vorbereiten = morgens chillen.</div>'+
+      '<div class="sub"><div>Name: <span></span></div><div>Woche vom: <span></span></div><div>bis: <span></span></div></div>'+
+      '<table><thead><tr><th>Aufgabe</th>'+DAY_SHORT.map(function(d){return '<th>'+d+'</th>';}).join("")+'</tr></thead><tbody>';
+    CATS.forEach(function(c){
+      var when = c.days.length===7 ? "jeden Tag" : "Sonntag bis Donnerstag";
+      h+='<tr class="cat"><td colspan="8">'+c.title+'<small>'+when+'</small></td></tr>';
+      c.tasks.forEach(function(t){
+        var days=t.days||c.days;
+        h+='<tr><td>'+t.t+(t.days?' ('+t.days.map(function(d){return DAY_SHORT[d];}).join(" + ")+')':'')+'<span class="hint">'+t.h+'</span></td>';
+        for (var i=0;i<7;i++) h+='<td class="d">'+(days.indexOf(i)>=0?'<span class="cb"></span>':'<span class="na"></span>')+'</td>';
+        h+='</tr>';
+      });
+    });
+    h+='<tr class="total"><td>Alles geschafft? Stern ausmalen!</td>'+DAY_SHORT.map(function(){return '<td class="d"><span class="star">☆</span></td>';}).join("")+'</tr>';
+    h+='</tbody></table>'+
+      '<div class="foot"><div class="fbox">Fehlt was / muss besorgt werden:<i></i><i></i><i></i></div>'+
+      '<div class="fbox">Wochen-Bilanz: ____ von 7 Sternen<i></i>Belohnung bei 7/7:<i></i></div></div>'+
+      '<div class="legend">☐ = heute erledigen &nbsp;·&nbsp; — = an diesem Tag frei (Fr + Sa ist morgen keine Schule)</div>';
+    $("sheet").innerHTML=h;
+  }
+
+  /* ---------- tabs ---------- */
+  document.querySelectorAll(".nav button").forEach(function(b){
+    b.onclick=function(){
+      document.querySelectorAll(".nav button").forEach(function(o){ o.setAttribute("aria-selected", String(o===b)); $(o.dataset.view).hidden = o!==b; });
+      if (b.dataset.view==="viewWeek") renderWeek();
+      window.scrollTo(0,0);
+    };
+  });
+
+  function renderToday(){ renderHello(); renderStories(); renderProgress(); renderFeed(); }
+  function renderAll(){ renderToday(); renderWeek(); renderSheet(); }
+  renderAll();
+})();
+</script>
+</body>
+</html>
