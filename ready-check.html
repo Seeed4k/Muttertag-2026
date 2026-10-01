@@ -157,6 +157,17 @@ button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px soli
 .party-card p{color:var(--muted);margin:0 0 18px}
 .btn{display:inline-block;background:var(--grad);color:#fff;font-weight:800;padding:12px 26px;border-radius:999px}
 #confetti{position:fixed;inset:0;pointer-events:none;z-index:16}
+.share{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border-radius:14px;background:var(--surface-2);font-weight:800;margin-top:2px}
+.share svg{width:20px;height:20px;color:var(--cyan)}
+.sheet-share{position:fixed;inset:0;background:rgba(11,10,18,.8);z-index:15;display:flex;align-items:flex-end;justify-content:center}
+.sheet-share .panel{width:100%;max-width:520px;background:var(--surface);border-radius:24px 24px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom,0px));display:grid;gap:12px}
+.sheet-share h3{margin:0;font-family:var(--display);font-size:18px}
+.sheet-share p{margin:0;color:var(--muted);font-size:14px}
+#shareText{width:100%;min-height:190px;font:inherit;font-size:14px;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:12px;resize:vertical}
+.sheet-share .acts{display:flex;flex-wrap:wrap;gap:10px}
+.sheet-share .acts>*{flex:1;text-align:center;text-decoration:none;min-width:140px}
+.btn.wa{background:#25d366;color:#05210f}
+.btn.ghost{background:var(--surface-2);color:var(--fg)}
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
@@ -164,7 +175,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px soli
 @page{size:A4 portrait;margin:10mm}
 @media print{
   body{background:#fff!important;color:#000!important}
-  .app>*:not(#viewPrint),.nav,.toast,.party,#confetti,.printinfo{display:none!important}
+  .app>*:not(#viewPrint),.nav,.toast,.party,#confetti,.printinfo,.sheet-share{display:none!important}
   .app{max-width:none;padding:0}
   #viewPrint{display:block!important}
   .paper-wrap{overflow:visible;margin:0}
@@ -199,6 +210,7 @@ button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px soli
       <div class="row"><b id="progNum">0/0</b><small id="progLabel">erledigt</small></div>
       <div class="bar"><i id="progBar"></i></div>
       <div class="vibe" id="vibe"></div>
+      <button type="button" class="share" id="shareBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7Z"/></svg>Status an Mama/Papa senden</button>
     </div>
 
     <div class="feed" id="feed"></div>
@@ -250,6 +262,18 @@ button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px soli
   </div>
 </div>
 <canvas id="confetti"></canvas>
+<div class="sheet-share" id="sharePanel" hidden>
+  <div class="panel" role="dialog" aria-labelledby="shareTitle">
+    <h3 id="shareTitle">Status senden</h3>
+    <p>Per WhatsApp schicken oder kopieren und bei Snapchat &amp; Co. einfügen.</p>
+    <textarea id="shareText" readonly aria-label="Nachricht"></textarea>
+    <div class="acts">
+      <a class="btn wa" id="shareWa" href="#" target="_blank" rel="noopener">WhatsApp</a>
+      <button type="button" class="btn ghost" id="shareCopy">Kopieren</button>
+    </div>
+    <button type="button" class="chip" id="shareClose" style="justify-self:center">Schließen</button>
+  </div>
+</div>
 
 <script>
 (function(){
@@ -465,6 +489,37 @@ button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px soli
       if (++f<160) requestAnimationFrame(loop); else x.clearRect(0,0,W,H);
     })();
   }
+
+  /* ---------- share status ---------- */
+  function statusText(){
+    var d=selected, k=keyOf(d), done=S.done[k]||{}, st=stats(d), nm=S.name.trim();
+    var lines=["📲 Ready Check"+(nm?" von "+nm:""),DAY_LONG[d.getDay()]+", "+d.getDate()+"."+(d.getMonth()+1)+".",""];
+    lines.push((st.full?"✅ Alles erledigt! ":"⏳ ")+st.n+"/"+st.total+" Aufgaben ("+st.pct+" %)");
+    lines.push("");
+    tasksFor(d.getDay()).forEach(function(g){
+      var open=g.tasks.filter(function(t){return !done[t.id];});
+      var n=g.tasks.length-open.length;
+      lines.push((open.length?"▫️ ":"✅ ")+g.cat.title+" "+n+"/"+g.tasks.length);
+      open.forEach(function(t){ lines.push("    offen: "+t.t); });
+    });
+    var note=(S.notes[k]||"").trim();
+    if (note){ lines.push(""); lines.push("🛒 Muss besorgt werden:"); lines.push(note); }
+    var s=streak();
+    if (s>0){ lines.push(""); lines.push("🔥 Streak: "+s+(s===1?" Tag":" Tage")); }
+    return lines.join("\n");
+  }
+  $("shareBtn").onclick=function(){
+    var t=statusText();
+    $("shareText").value=t;
+    $("shareWa").href="https://wa.me/?text="+encodeURIComponent(t);
+    $("sharePanel").hidden=false;
+  };
+  $("shareClose").onclick=function(){ $("sharePanel").hidden=true; };
+  $("sharePanel").onclick=function(e){ if(e.target===this) this.hidden=true; };
+  $("shareCopy").onclick=function(){
+    var ta=$("shareText"), fallback=function(){ ta.focus(); ta.select(); toast("Text markiert, jetzt kopieren"); };
+    try{ navigator.clipboard.writeText(ta.value).then(function(){ toast("Kopiert ✅"); },fallback); }catch(e){ fallback(); }
+  };
 
   /* ---------- week view ---------- */
   function renderWeek(){
