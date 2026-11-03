@@ -8,8 +8,9 @@ import { openDb, getSettings, setSettings } from './lib/db.js';
 import { token, parseJSON, parseCSV, toCSV, slugify, daysBetween, localStamp } from './lib/util.js';
 import { forecast } from './lib/forecast.js';
 import { publishPost, runScheduler, checkFeed, PLATFORMS } from './lib/social.js';
-import { runAudit } from './lib/audit.js';
-import { renderReport } from './lib/report.js';
+import { renderReport, renderWidget } from './lib/report.js';
+import { searchArea, leadPotential, heatmapScan, hasPlacesKey } from './lib/places.js';
+import { createAudit, auditProspect, prospectToCrm, outreachForProspect, upsertProspect, runAgent, runDueAgents } from './lib/prospects.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
@@ -73,8 +74,8 @@ route('POST', '/api/login', ({ body, res }) => {
 route('POST', '/api/logout', ({ req, res }) => { sessions.delete(cookies(req).sid); res.setHeader('set-cookie', 'sid=; Path=/; Max-Age=0'); return { ok: true }; });
 
 // ---------- Einstellungen & Dashboard ----------
-route('GET', '/api/settings', () => ({ ...getSettings(db), platforms: PLATFORMS, places_key: !!process.env.GOOGLE_PLACES_API_KEY, pagespeed_key: !!process.env.PAGESPEED_API_KEY }));
-route('PUT', '/api/settings', ({ body }) => { const { platforms, places_key, pagespeed_key, ...rest } = body; setSettings(db, rest); return getSettings(db); });
+route('GET', '/api/settings', () => ({ ...getSettings(db), platforms: PLATFORMS, places_key: !!process.env.GOOGLE_PLACES_API_KEY, pagespeed_key: !!process.env.PAGESPEED_API_KEY, ai_key: !!process.env.ANTHROPIC_API_KEY }));
+route('PUT', '/api/settings', ({ body }) => { const { platforms, places_key, pagespeed_key, ai_key, ...rest } = body; setSettings(db, rest); return getSettings(db); });
 route('GET', '/api/dashboard', () => {
   const f = forecast(db, null);
   return {
@@ -317,29 +318,148 @@ route('GET', '/l/:slug', ({ params, req, res }) => {
   res.writeHead(302, { location: l.target_url }); res.end(); return null;
 }, { pub: true });
 
-// ---------- Website-Audits (Interessenten) ----------
-route('GET', '/api/audits', () => all('SELECT id, token, business_name, url, industry, score, created_at FROM audits ORDER BY id DESC'));
-route('GET', '/api/audits/:id', ({ params }) => { const a = one('SELECT * FROM audits WHERE id = ?', params.id); if (!a) throw new HttpError(404, 'Nicht gefunden'); return { ...a, result: parseJSON(a.result, null) }; });
+// ---------- Website-Audits ----------
+route('GET', '/api/audits', () => all(`SELECT a.id, a.token, a.business_name, a.url, a.industry, a.score, a.source, a.prospect_id, a.created_at,
+  (SELECT COUNT(*) FROM report_views v WHERE v.audit_id = a.id) views FROM audits a ORDER BY a.id DESC`));
+route('GET', '/api/audits/:id', ({ params }) => {
+  const a = one('SELECT * FROM audits WHERE id = ?', params.id); if (!a) throw new HttpError(404, 'Nicht gefunden');
+  return { ...a, result: parseJSON(a.result, null), heatmaps: parseJSON(a.heatmaps, []), views: one('SELECT COUNT(*) n FROM report_views WHERE audit_id = ?', a.id).n,
+    prospect: a.prospect_id ? one('SELECT * FROM prospects WHERE id = ?', a.prospect_id) : null };
+});
+const auditError = (e) => new HttpError(e.status || 422, e.status ? e.message : `Website konnte nicht geprüft werden: ${e.cause?.code || e.message}`);
 route('POST', '/api/audits', async ({ body }) => {
-  need(body.business_name, 'Firmenname fehlt'); need(body.url, 'Website fehlt');
-  let result;
-  try { result = await runAudit(body, process.env); } catch (e) { throw new HttpError(422, `Website konnte nicht geprüft werden: ${e.cause?.code || e.message}`); }
-  const id = insert('audits', { token: token(10), business_name: body.business_name, url: result.url, industry: body.industry || '', phone: body.phone || '', address: body.address || '', score: result.score, result: JSON.stringify(result) });
-  return { ...one('SELECT * FROM audits WHERE id = ?', id), result };
+  need(body.business_name, 'Firmenname fehlt');
+  if (!body.url && !hasPlacesKey()) throw new HttpError(400, 'Website fehlt');
+  try { return await createAudit(db, body, { source: body.source || 'manuell', prospect_id: body.prospect_id ? Number(body.prospect_id) : null }); } catch (e) { throw auditError(e); }
 });
 route('POST', '/api/audits/:id/to-lead', ({ params }) => {
-  const a = one('SELECT * FROM audits WHERE id = ?', params.id);
-  const contact_id = a.contact_id || insert('contacts', { name: a.business_name, phone: a.phone, company: a.business_name, tags: 'audit', notes: `Audit ${a.score}% – ${a.url}` });
-  update('audits', a.id, { contact_id });
-  const p = one('SELECT * FROM pipelines ORDER BY id LIMIT 1');
-  const stage = one('SELECT id FROM stages WHERE pipeline_id = ? ORDER BY position LIMIT 1', p.id);
-  const id = insert('opportunities', { name: `${a.business_name} – Website`, contact_id, pipeline_id: p.id, stage_id: stage?.id, company: a.business_name, source: 'Website-Audit', updated_at: localStamp() });
-  return { opportunity_id: id, contact_id };
+  const a = one('SELECT * FROM audits WHERE id = ?', params.id); if (!a) throw new HttpError(404, 'Nicht gefunden');
+  return prospectToCrm(db, a.prospect_id);
 });
-route('DELETE', '/api/audits/:id', ({ params }) => { db.prepare('DELETE FROM audits WHERE id = ?').run(params.id); return { ok: true }; });
-route('GET', '/bericht/:token', ({ params, res }) => {
+route('POST', '/api/audits/:id/heatmap', async ({ params, body }) => {
+  const a = one('SELECT * FROM audits WHERE id = ?', params.id); if (!a) throw new HttpError(404, 'Nicht gefunden');
+  const place = parseJSON(a.result, {}).meta?.place;
+  if (!place?.lat) throw new HttpError(400, 'Für eine Heatmap muss das Google-Unternehmensprofil gefunden worden sein (GOOGLE_PLACES_API_KEY).');
+  const scan = await heatmapScan({ keyword: need(body.keyword, 'Suchbegriff fehlt'), lat: place.lat, lng: place.lng, placeId: place.place_id, size: Number(body.size) || 3, radiusKm: Number(body.radius_km) || 3 });
+  const maps = [scan, ...parseJSON(a.heatmaps, []).filter((h) => h.keyword.toLowerCase() !== scan.keyword.toLowerCase())].slice(0, 5);
+  update('audits', a.id, { heatmaps: JSON.stringify(maps) });
+  return scan;
+});
+route('DELETE', '/api/audits/:id', ({ params }) => {
+  db.prepare('UPDATE prospects SET audit_id = NULL WHERE audit_id = ?').run(params.id);
+  db.prepare('DELETE FROM audits WHERE id = ?').run(params.id); return { ok: true };
+});
+route('GET', '/bericht/:token', ({ params, req, res, query }) => {
   const a = one('SELECT * FROM audits WHERE token = ?', params.token); if (!a) throw new HttpError(404, 'Bericht nicht gefunden');
-  send(res, 200, renderReport({ ...a, result: parseJSON(a.result, {}) }, getSettings(db)), 'text/html; charset=utf-8'); return null;
+  if (!query.vorschau && !/bot|crawl|spider|preview|facebookexternalhit|whatsapp/i.test(req.headers['user-agent'] || '')) insert('report_views', { audit_id: a.id, referer: req.headers.referer || '' });
+  send(res, 200, renderReport({ ...a, result: parseJSON(a.result, {}), heatmaps: parseJSON(a.heatmaps, []) }, getSettings(db)), 'text/html; charset=utf-8'); return null;
+}, { pub: true });
+
+// ---------- Interessenten & Lead-Finder ----------
+const prospectQuery = `SELECT p.*, a.score audit_score, a.token audit_token, (SELECT COUNT(*) FROM report_views v WHERE v.audit_id = p.audit_id) views FROM prospects p LEFT JOIN audits a ON a.id = p.audit_id`;
+route('GET', '/api/prospects', ({ query }) => {
+  const where = []; const args = [];
+  if (query.status) { where.push('p.status = ?'); args.push(query.status); }
+  if (query.source) { where.push('p.source = ?'); args.push(query.source); }
+  if (query.q) { where.push('(p.name LIKE ? OR p.address LIKE ? OR p.category LIKE ?)'); args.push(...Array(3).fill(`%${query.q}%`)); }
+  return all(`${prospectQuery} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY p.id DESC`, ...args);
+});
+route('POST', '/api/prospects/search', async ({ body }) => {
+  need(body.query, 'Suchbegriff fehlt'); need(body.location, 'Standort fehlt');
+  const r = await searchArea({ query: body.query, location: body.location, radiusKm: Number(body.radius_km) || 5 });
+  const known = new Map(all('SELECT id, place_id, status FROM prospects WHERE place_id IS NOT NULL').map((p) => [p.place_id, p]));
+  return { center: r.center, results: r.results.map((p) => ({ ...p, potential: leadPotential(p), prospect: known.get(p.place_id) || null })) };
+});
+route('POST', '/api/prospects', async ({ body }) => {
+  // Einzeln oder mehrere Treffer aus dem Lead-Finder übernehmen; optional sofort prüfen
+  const items = body.items || [body];
+  const out = [];
+  for (const it of items) {
+    need(it.name, 'Name fehlt');
+    const r = upsertProspect(db, it, { source: it.source || (it.place_id ? 'lead-finder' : 'manuell') });
+    if (body.audit && r.created) { try { await auditProspect(db, r.id); } catch (e) { out.push({ ...r, error: e.message }); continue; } }
+    out.push(r);
+  }
+  return { added: out.filter((r) => r.created).length, items: out };
+});
+route('PUT', '/api/prospects/:id', ({ params, body }) => { update('prospects', params.id, pick(body, ['name', 'address', 'phone', 'website', 'category', 'status', 'notes'])); return one(`${prospectQuery} WHERE p.id = ?`, params.id); });
+route('DELETE', '/api/prospects/:id', ({ params }) => { db.prepare('DELETE FROM prospects WHERE id = ?').run(params.id); return { ok: true }; });
+route('POST', '/api/prospects/:id/audit', async ({ params }) => { try { return await auditProspect(db, params.id); } catch (e) { throw auditError(e); } });
+route('POST', '/api/prospects/:id/crm', ({ params }) => prospectToCrm(db, params.id));
+route('POST', '/api/prospects/:id/outreach', ({ params }) => outreachForProspect(db, params.id));
+
+// ---------- Prospect-Agent ----------
+crud('/api/agents', 'prospect_agents', ['name', 'query', 'location', 'radius_km', 'frequency', 'weekday', 'time', 'only_no_website', 'min_potential', 'max_per_run', 'auto_audit', 'auto_crm', 'auto_outreach', 'active'], {
+  required: ['name', 'query', 'location'],
+  list: () => all(`SELECT g.*, (SELECT COUNT(*) FROM prospects p WHERE p.agent_id = g.id) prospect_count FROM prospect_agents g ORDER BY g.id DESC`),
+});
+route('POST', '/api/agents/:id/run', async ({ params }) => {
+  const g = one('SELECT * FROM prospect_agents WHERE id = ?', params.id); if (!g) throw new HttpError(404, 'Nicht gefunden');
+  return runAgent(db, g);
+});
+
+// ---------- Analytics (Prospecting) ----------
+route('GET', '/api/analytics', ({ query }) => {
+  const months = Math.min(24, Number(query.months) || 6);
+  const since = new Date(); since.setDate(1); since.setMonth(since.getMonth() - months + 1);
+  const from = since.toISOString().slice(0, 10);
+  const keys = []; for (let i = 0; i < months; i++) { const d = new Date(since); d.setMonth(since.getMonth() + i); keys.push(d.toISOString().slice(0, 7)); }
+  const series = (sql) => { const m = Object.fromEntries(all(sql, from).map((r) => [r.k + '|' + (r.s || ''), r.n])); return m; };
+  const reports = series(`SELECT substr(created_at,1,7) k, source s, COUNT(*) n FROM audits WHERE created_at >= ? GROUP BY k, s`);
+  const views = series(`SELECT substr(created_at,1,7) k, '' s, COUNT(*) n FROM report_views WHERE created_at >= ? GROUP BY k`);
+  const sources = ['manuell', 'lead-finder', 'agent', 'widget'];
+  const weeks = Math.max(1, months * 4.345);
+  const prospects = one('SELECT COUNT(*) n FROM prospects WHERE created_at >= ?', from).n;
+  return {
+    totals: {
+      reports: one('SELECT COUNT(*) n FROM audits WHERE created_at >= ?', from).n,
+      contacts: one('SELECT COUNT(*) n FROM prospects WHERE contact_id IS NOT NULL AND created_at >= ?', from).n,
+      prospects, per_week: Math.round((prospects / weeks) * 10) / 10,
+      views: one('SELECT COUNT(*) n FROM report_views WHERE created_at >= ?', from).n,
+    },
+    months: keys,
+    reports_by_month: keys.map((k) => Object.fromEntries([['month', k], ...sources.map((s) => [s, reports[k + '|' + s] || 0])])),
+    views_by_month: keys.map((k) => ({ month: k, views: views[k + '|'] || 0 })),
+    contacts_by_source: sources.map((s) => ({ source: s, n: one('SELECT COUNT(*) n FROM prospects WHERE contact_id IS NOT NULL AND source = ? AND created_at >= ?', s, from).n })),
+    top_reports: all(`SELECT a.id, a.business_name, a.score, COUNT(v.id) views, MAX(v.created_at) last_view FROM audits a JOIN report_views v ON v.audit_id = a.id GROUP BY a.id ORDER BY views DESC LIMIT 10`),
+    widget: all('SELECT w.*, a.score FROM widget_submissions w LEFT JOIN audits a ON a.id = w.audit_id ORDER BY w.id DESC LIMIT 20'),
+  };
+});
+
+// ---------- Website-Check-Widget (öffentlich, zum Einbetten auf der eigenen Website) ----------
+const hits = new Map();
+function rateLimit(key, max, windowMs) {
+  const now = Date.now(); const arr = (hits.get(key) || []).filter((t) => now - t < windowMs);
+  if (arr.length >= max) return false; arr.push(now); hits.set(key, arr); return true;
+}
+route('GET', '/widget', ({ res }) => { send(res, 200, renderWidget(getSettings(db)), 'text/html; charset=utf-8', { 'cache-control': 'public, max-age=300' }); return null; }, { pub: true });
+route('GET', '/widget.js', ({ res }) => {
+  const base = (getSettings(db).public_url || '').replace(/\/$/, '');
+  send(res, 200, `(function(){var el=document.getElementById('webhafen-check')||document.currentScript.parentNode.insertBefore(document.createElement('div'),document.currentScript);
+var f=document.createElement('iframe');f.src='${base}/widget';f.title='Kostenloser Website-Check';f.loading='lazy';f.style.cssText='width:100%;border:0;min-height:560px;border-radius:14px';
+el.appendChild(f);window.addEventListener('message',function(e){if(e.source===f.contentWindow&&e.data&&e.data.wcHeight){f.style.height=e.data.wcHeight+'px'}});})();`,
+  'text/javascript; charset=utf-8', { 'cache-control': 'public, max-age=300', 'access-control-allow-origin': '*' }); return null;
+}, { pub: true });
+route('POST', '/api/public/widget', async ({ body, req }) => {
+  if (body.website_hp) throw new HttpError(400, 'Ungültig'); // Honeypot gegen Bots
+  need(body.business_name, 'Bitte den Firmennamen angeben'); need(body.url, 'Bitte die Website angeben'); need(body.email, 'Bitte eine E-Mail-Adresse angeben');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) throw new HttpError(400, 'Bitte eine gültige E-Mail-Adresse angeben');
+  if (!body.consent) throw new HttpError(400, 'Bitte der Kontaktaufnahme zustimmen');
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  const ipKey = createHash('sha256').update(ip + (process.env.ADMIN_PASSWORD || '')).digest('hex').slice(0, 16);
+  if (!rateLimit('w:' + ipKey, 3, 3600e3) || !rateLimit('w:all', 50, 86400e3)) throw new HttpError(429, 'Zu viele Anfragen – bitte später erneut versuchen.');
+  const sub = insert('widget_submissions', { name: body.name || '', email: body.email, phone: body.phone || '', business_name: body.business_name, url: body.url });
+  try {
+    const a = await createAudit(db, { business_name: body.business_name, url: body.url, phone: body.phone || '' }, { source: 'widget' });
+    const contact_id = insert('contacts', { name: body.name || body.business_name, email: body.email, phone: body.phone || '', company: body.business_name, tags: 'widget,website-check', notes: `Website-Check über Widget: ${a.score} %\nEinwilligung zur Kontaktaufnahme: ${localStamp()}` });
+    update('prospects', a.prospect_id, { contact_id, status: 'im CRM' });
+    prospectToCrm(db, a.prospect_id);
+    update('widget_submissions', sub, { audit_id: a.id, prospect_id: a.prospect_id });
+    return { ok: true, score: a.score, report_url: `/bericht/${a.token}` };
+  } catch (e) {
+    update('widget_submissions', sub, { error: e.message });
+    throw new HttpError(422, 'Die Website konnte nicht geprüft werden. Bitte Adresse prüfen.');
+  }
 }, { pub: true });
 
 // ---------- Statische Dateien ----------
@@ -383,7 +503,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     if (!PASSWORD) console.warn('⚠  ADMIN_PASSWORD ist nicht gesetzt – die App ist ohne Login erreichbar. Nur lokal so betreiben!');
   });
   let busy = false;
-  setInterval(async () => { if (busy) return; busy = true; try { await runScheduler(db); } catch (e) { console.error('Planer:', e); } busy = false; }, 30_000);
+  setInterval(async () => { if (busy) return; busy = true; try { await runScheduler(db); await runDueAgents(db); } catch (e) { console.error('Planer:', e); } busy = false; }, 30_000);
   const feeds = async () => { for (const f of all('SELECT * FROM rss_feeds')) await checkFeed(db, f); };
   setInterval(() => feeds().catch((e) => console.error('RSS:', e)), 30 * 60_000);
 }

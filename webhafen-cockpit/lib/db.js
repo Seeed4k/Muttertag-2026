@@ -77,11 +77,45 @@ export function openDb(file) {
     referer TEXT, created_at TEXT DEFAULT (datetime('now','localtime')));
 
   CREATE TABLE IF NOT EXISTS audits (
-    id INTEGER PRIMARY KEY, token TEXT UNIQUE NOT NULL, business_name TEXT NOT NULL, url TEXT NOT NULL,
+    id INTEGER PRIMARY KEY, token TEXT UNIQUE NOT NULL, business_name TEXT NOT NULL, url TEXT DEFAULT '',
     industry TEXT DEFAULT '', phone TEXT DEFAULT '', address TEXT DEFAULT '', score INTEGER,
     result TEXT, contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
     created_at TEXT DEFAULT (datetime('now','localtime')));
   `);
+
+  db.exec(`
+  CREATE TABLE IF NOT EXISTS prospects (
+    id INTEGER PRIMARY KEY, place_id TEXT UNIQUE, name TEXT NOT NULL, address TEXT DEFAULT '', lat REAL, lng REAL,
+    phone TEXT DEFAULT '', website TEXT DEFAULT '', category TEXT DEFAULT '', rating REAL, review_count INTEGER DEFAULT 0,
+    photos INTEGER DEFAULT 0, maps_url TEXT DEFAULT '', potential INTEGER, potential_why TEXT DEFAULT '[]',
+    status TEXT DEFAULT 'neu', source TEXT DEFAULT 'manuell', audit_id INTEGER, contact_id INTEGER, opportunity_id INTEGER,
+    agent_id INTEGER, outreach TEXT, notes TEXT DEFAULT '', created_at TEXT DEFAULT (datetime('now','localtime')));
+  CREATE TABLE IF NOT EXISTS prospect_agents (
+    id INTEGER PRIMARY KEY, name TEXT NOT NULL, query TEXT NOT NULL, location TEXT NOT NULL, radius_km REAL DEFAULT 10,
+    frequency TEXT DEFAULT 'weekly', weekday INTEGER DEFAULT 1, time TEXT DEFAULT '07:00', only_no_website INTEGER DEFAULT 0,
+    min_potential INTEGER DEFAULT 0, max_per_run INTEGER DEFAULT 10, auto_audit INTEGER DEFAULT 1, auto_crm INTEGER DEFAULT 0,
+    auto_outreach INTEGER DEFAULT 0, active INTEGER DEFAULT 1, last_run TEXT, last_result TEXT,
+    created_at TEXT DEFAULT (datetime('now','localtime')));
+  CREATE TABLE IF NOT EXISTS report_views (
+    id INTEGER PRIMARY KEY, audit_id INTEGER REFERENCES audits(id) ON DELETE CASCADE, referer TEXT,
+    created_at TEXT DEFAULT (datetime('now','localtime')));
+  CREATE TABLE IF NOT EXISTS widget_submissions (
+    id INTEGER PRIMARY KEY, name TEXT, email TEXT, phone TEXT, business_name TEXT, url TEXT, audit_id INTEGER, prospect_id INTEGER,
+    error TEXT, created_at TEXT DEFAULT (datetime('now','localtime')));
+  `);
+  const addColumn = (table, col, def) => {
+    if (!db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+  };
+  addColumn('audits', 'prospect_id', 'INTEGER');
+  addColumn('audits', 'place_id', "TEXT DEFAULT ''");
+  addColumn('audits', 'source', "TEXT DEFAULT 'manuell'");
+  addColumn('audits', 'heatmaps', "TEXT DEFAULT '[]'");
+  // Ältere Audits bekommen einen Interessenten-Eintrag
+  for (const a of db.prepare('SELECT * FROM audits WHERE prospect_id IS NULL').all()) {
+    const pid = db.prepare(`INSERT INTO prospects (name, address, phone, website, category, status, source, audit_id, contact_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      .run(a.business_name, a.address || '', a.phone || '', a.url || '', a.industry || '', a.contact_id ? 'im CRM' : 'geprüft', a.source || 'manuell', a.id, a.contact_id, a.created_at).lastInsertRowid;
+    db.prepare('UPDATE audits SET prospect_id = ? WHERE id = ?').run(pid, a.id);
+  }
 
   // Erststart: Standard-Pipeline anlegen
   const count = db.prepare('SELECT COUNT(*) AS n FROM pipelines').get().n;

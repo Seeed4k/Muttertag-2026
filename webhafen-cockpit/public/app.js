@@ -63,7 +63,7 @@ const TABS = {
   social: [['', 'Planer'], ['kalender', 'Kalender'], ['konten', 'Konten'], ['evergreen', 'Evergreen'], ['rss', 'RSS-Feeds'], ['csv', 'CSV-Import']],
   affiliate: [['', 'Dashboard'], ['kampagnen', 'Kampagnen'], ['partner', 'Affiliates'], ['provisionen', 'Provisionen']],
 };
-const TITLES = { dashboard: 'Übersicht', kontakte: 'Kontakte', leads: 'Leads', social: 'Social Planner', affiliate: 'Affiliate-Manager', links: 'Trigger-Links', audits: 'Website-Check', einstellungen: 'Einstellungen' };
+const TITLES = { dashboard: 'Übersicht', kontakte: 'Kontakte', leads: 'Leads', social: 'Social Planner', affiliate: 'Affiliate-Manager', links: 'Trigger-Links', audits: 'Akquise', einstellungen: 'Einstellungen' };
 async function render() {
   const [sec = 'dashboard', sub = '', ...rest] = location.hash.replace(/^#\/?/, '').split('/');
   $$('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.s === sec));
@@ -603,34 +603,239 @@ VIEWS.links = async (v) => {
   $$('[data-qr]').forEach((b) => (b.onclick = () => modal('QR-Code', `<div style="text-align:center"><p class="sub">${e(b.dataset.qr)}</p><p class="small sub">Den QR-Code erzeugst du mit einem Generator deiner Wahl aus dieser Adresse – jeder Scan wird hier als Klick gezählt.</p><button class="btn primary" id="cp">Adresse kopieren</button></div>`) && ($('#cp').onclick = () => copy(b.dataset.qr))));
 };
 
-// ===== Website-Check (Interessenten) =====
+// ===== Website-Check & Interessenten (Prospecting) =====
+const SRC = { manuell: 'Manuell', 'lead-finder': 'Lead-Finder', agent: 'Prospect-Agent', widget: 'Widget' };
+const PSTATUS = { neu: 'Neu', 'geprüft': 'Geprüft', 'im CRM': 'Im CRM', kontaktiert: 'Kontaktiert', ignoriert: 'Ignoriert' };
+const tone = (s) => (s == null ? '' : s >= 80 ? 'good' : s >= 50 ? 'warn' : 'bad');
+const potBadge = (p) => (p == null ? '<span class="sub">–</span>' : `<span class="badge ${p >= 60 ? 'lost' : p >= 30 ? 'manual' : 'won'}" title="Je höher, desto mehr Bedarf an Webdesign/Marketing">${p}</span>`);
+const starTxt = (r, n) => (r == null ? '<span class="sub">keine</span>' : `<span style="color:#f59e0b">★</span> ${String(r).replace('.', ',')} <span class="sub small">(${n})</span>`);
+TABS.audits = [['', 'Interessenten'], ['finder', 'Lead-Finder'], ['agent', 'Prospect-Agent'], ['widget', 'Widget'], ['analytics', 'Analytics']];
+
+let leafletP = null;
+function loadLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  return (leafletP ||= new Promise((res, rej) => {
+    const c = document.createElement('link'); c.rel = 'stylesheet'; c.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(c);
+    const s = document.createElement('script'); s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; s.onload = () => res(window.L); s.onerror = rej; document.head.appendChild(s);
+  }));
+}
+const pin = (color, label = '') => window.L.divIcon({ className: '', iconSize: [28, 28], iconAnchor: [14, 14],
+  html: `<div style="width:28px;height:28px;border-radius:50%;background:${color};color:#fff;display:grid;place-items:center;font:700 12px system-ui;border:2px solid #fff;box-shadow:0 1px 4px #0006">${label}</div>` });
+
 VIEWS.audits = async (v, sub) => {
-  if (sub) return auditDetail(v, sub);
-  const list = await GET('/api/audits');
-  v.innerHTML = `<div class="grid g2"><div class="card"><h3>Neuen Website-Check erstellen</h3><p class="sub small">Prüft Website, Tracking, SEO-Grundlagen und Ladezeit eines Interessenten und erstellt einen teilbaren Bericht mit deinem Branding – perfekt als Türöffner für die Akquise.</p>
-    <form id="af" class="form">${field('Firmenname *', 'business_name', '', 'text', 'required placeholder="Fahrschule Muster"')}${field('Website *', 'url', '', 'text', 'required placeholder="muster.de"')}
-    ${field('Branche', 'industry', '', 'text', 'placeholder="Fahrschule"')}${field('Telefon', 'phone', '', 'tel', 'placeholder="+49 5932 …"')}<div class="full">${field('Adresse', 'address', '', 'text', 'placeholder="Lange Str. 1, 49733 Haren (Ems)"')}</div>
-    <div class="actions"><button class="btn primary" id="go">🔍 Check starten</button></div></form>
-    <p class="small sub">${SETTINGS.places_key ? '✅ Google-Unternehmensprofil & Bewertungen werden mitgeprüft.' : 'ℹ️ Mit <code>GOOGLE_PLACES_API_KEY</code> werden zusätzlich Google-Profil & Bewertungen geprüft.'}</p></div>
-    <div class="card tablewrap"><h3 class="mb">Interessenten-Konten</h3>${list.length ? `<table><tr><th>Unternehmen</th><th class="num">Wertung</th><th>Erstellt</th></tr>${list.map((a) => `<tr><td><a href="#/audits/${a.id}"><b>${e(a.business_name)}</b></a><div class="small sub">${e(a.url.replace(/^https?:\/\//, ''))}</div></td>
-      <td class="num ${a.score >= 80 ? 'good' : a.score >= 50 ? 'warn' : 'bad'}"><b>${a.score}%</b></td><td>${dt(a.created_at)}</td></tr>`).join('')}</table>` : '<p class="sub">Noch keine Checks.</p>'}</div></div>`;
-  $('#af').onsubmit = safe(async (ev) => { ev.preventDefault(); const b = $('#go'); b.disabled = true; b.textContent = '⏳ Prüfe … (bis zu 1 Minute)';
-    try { const a = await POST('/api/audits', formData(ev.target)); location.hash = '#/audits/' + a.id; } finally { b.disabled = false; b.textContent = '🔍 Check starten'; } });
+  if (/^\d+$/.test(sub)) return auditDetail(v, sub);
+  if (sub === 'finder') return leadFinder(v);
+  if (sub === 'agent') return agentsView(v);
+  if (sub === 'widget') return widgetView(v);
+  if (sub === 'analytics') return analyticsView(v);
+  const f = J(sessionStorage.getItem('pfil'), {}) || {};
+  const qs = new URLSearchParams(Object.entries(f).filter(([, x]) => x)).toString();
+  const list = await GET('/api/prospects' + (qs ? '?' + qs : ''));
+  v.innerHTML = `<div class="row mb"><input id="pq" placeholder="Interessenten suchen …" value="${e(f.q || '')}" style="max-width:260px">
+    <select id="pst" style="width:auto"><option value="">Status: alle</option>${Object.entries(PSTATUS).map(([k, t]) => `<option value="${e(k)}" ${k === f.status ? 'selected' : ''}>${t}</option>`).join('')}</select>
+    <select id="psrc" style="width:auto"><option value="">Quelle: alle</option>${Object.entries(SRC).map(([k, t]) => `<option value="${k}" ${k === f.source ? 'selected' : ''}>${t}</option>`).join('')}</select>
+    <span class="grow"></span><button class="btn" id="man">Manuell prüfen</button><a class="btn primary" href="#/audits/finder">+ Interessenten finden</a></div>
+  ${list.length ? `<div class="card tablewrap"><table><tr><th>Unternehmen</th><th class="num">Potenzial</th><th class="num">Website-Check</th><th>Google</th><th>Website</th><th>Quelle</th><th>Status</th><th class="num">Aufrufe</th><th></th></tr>
+  ${list.map((p) => `<tr><td><b>${e(p.name)}</b><div class="small sub">${e(p.category ? p.category + ' · ' : '')}${e(p.address)}</div></td>
+    <td class="num">${potBadge(p.potential)}</td><td class="num">${p.audit_id ? `<a href="#/audits/${p.audit_id}" class="${tone(p.audit_score)}"><b>${p.audit_score}%</b></a>` : '<span class="sub">–</span>'}</td>
+    <td>${starTxt(p.rating, p.review_count)}</td><td>${p.website ? `<a href="${e(p.website)}" target="_blank" rel="noopener">Ja ↗</a>` : '<b class="bad">Nein</b>'}</td>
+    <td class="small">${e(SRC[p.source] || p.source)}</td><td><select data-ps="${p.id}" style="width:auto;padding:3px 6px">${Object.entries(PSTATUS).map(([k, t]) => `<option value="${e(k)}" ${k === p.status ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
+    <td class="num">${p.views || 0}</td>
+    <td class="num" style="white-space:nowrap">${p.audit_id ? '' : `<button class="btn sm" data-chk="${p.id}">Prüfen</button> `}<button class="btn sm" data-crm="${p.id}" ${p.opportunity_id ? 'disabled title="Bereits im CRM"' : ''}>→ CRM</button> <button class="btn sm" data-mail="${p.id}">✉</button> <button class="btn sm danger" data-pdel="${p.id}">🗑</button></td></tr>`).join('')}</table></div>`
+    : empty('🧭', 'Noch keine Interessenten', 'Finde lokale Unternehmen über den Lead-Finder, lass den Prospect-Agenten suchen oder prüfe eine Website manuell.', '<a class="btn primary" href="#/audits/finder">Lead-Finder öffnen</a>')}`;
+  const setF = (k, val) => { f[k] = val; sessionStorage.setItem('pfil', JSON.stringify(f)); render(); };
+  $('#pq').onchange = (ev) => setF('q', ev.target.value); $('#pst').onchange = (ev) => setF('status', ev.target.value); $('#psrc').onchange = (ev) => setF('source', ev.target.value);
+  $('#man').onclick = manualAuditModal;
+  $$('[data-ps]').forEach((s) => (s.onchange = safe(async () => { await PUT('/api/prospects/' + s.dataset.ps, { status: s.value }); toast('Status gespeichert'); })));
+  $$('[data-chk]').forEach((b) => (b.onclick = safe(async () => { b.disabled = true; b.textContent = '⏳'; const a = await POST(`/api/prospects/${b.dataset.chk}/audit`); location.hash = '#/audits/' + a.id; })));
+  $$('[data-crm]').forEach((b) => (b.onclick = safe(async () => { await POST(`/api/prospects/${b.dataset.crm}/crm`); toast('Kontakt und Lead angelegt'); render(); })));
+  $$('[data-mail]').forEach((b) => (b.onclick = () => outreachModal(list.find((p) => p.id == b.dataset.mail))));
+  $$('[data-pdel]').forEach((b) => (b.onclick = safe(async () => { if (confirm('Interessent löschen? (Website-Check bleibt erhalten)')) { await DEL('/api/prospects/' + b.dataset.pdel); render(); } })));
 };
+
+function manualAuditModal() {
+  modal('Website manuell prüfen', `<form class="form">${field('Firmenname *', 'business_name', '', 'text', 'required placeholder="Fahrschule Muster"')}${field('Website', 'url', '', 'text', 'placeholder="muster.de (leer = ohne Website)"')}
+    ${field('Branche / Suchbegriff', 'industry', '', 'text', 'placeholder="Fahrschule"')}${field('Telefon', 'phone', '', 'tel')}<div class="full">${field('Adresse', 'address', '', 'text', 'placeholder="Lange Str. 1, 49733 Haren (Ems)"')}</div>
+    <p class="full small sub">${SETTINGS.places_key ? '✅ Google-Profil, Bewertungen und lokales Ranking werden mitgeprüft.' : 'ℹ️ Mit <code>GOOGLE_PLACES_API_KEY</code> werden zusätzlich Google-Profil, Bewertungen und Ranking geprüft.'}</p>
+    <div class="actions"><button class="btn primary" id="go">🔍 Check starten</button></div></form>`, async (d) => {
+    $('#go').disabled = true; $('#go').textContent = '⏳ Prüfe … (bis zu 1 Minute)';
+    try { const a = await POST('/api/audits', d); location.hash = '#/audits/' + a.id; } catch (er) { $('#go').disabled = false; $('#go').textContent = '🔍 Check starten'; throw er; }
+  });
+}
+
+async function outreachModal(p) {
+  const body = modal(`Erstansprache: ${p.name}`, '<p class="sub">Entwurf wird erstellt …</p>');
+  const draw = (d) => {
+    body.innerHTML = `<form class="form"><div class="full">${field('Betreff', 'subject', d.subject)}</div><label class="full">Text<textarea name="body" rows="14">${e(d.body)}</textarea></label>
+      <p class="full small sub">Erstellt mit: ${e(d.generator)}${d.note ? ' · ' + e(d.note) : ''}${SETTINGS.ai_key ? '' : ' · Mit <code>ANTHROPIC_API_KEY</code> schreibt Claude individuelle Entwürfe.'}</p>
+      <p class="full small warn">⚖️ Hinweis: Werbe-E-Mails an Unternehmen ohne vorherige Einwilligung sind in Deutschland nach § 7 UWG in der Regel unzulässig. Nutze den Text z. B. als Brief, für ein Gespräch vor Ort oder für Kontakte, die eingewilligt haben (z. B. über das Widget).</p>
+      <div class="actions"><button type="button" class="btn" id="re">↻ Neu erstellen</button><span class="grow"></span><button type="button" class="btn" id="cp">Kopieren</button><button type="button" class="btn primary" id="ml">Im Mailprogramm öffnen</button></div></form>`;
+    const cur = () => formData($('form', body));
+    $('#cp').onclick = () => { const c = cur(); copy(`${c.subject}\n\n${c.body}`); };
+    $('#ml').onclick = () => { const c = cur(); location.href = `mailto:?subject=${encodeURIComponent(c.subject)}&body=${encodeURIComponent(c.body)}`; };
+    $('#re').onclick = safe(async () => { $('#re').disabled = true; draw(await POST(`/api/prospects/${p.id}/outreach`)); });
+  };
+  try { draw(p.outreach ? J(p.outreach) : await POST(`/api/prospects/${p.id}/outreach`)); } catch (er) { body.innerHTML = `<p class="bad">${e(er.message)}</p>`; }
+}
+
+async function leadFinder(v) {
+  const last = J(sessionStorage.getItem('lf'), null);
+  v.innerHTML = `<div class="card mb"><div class="row between mb"><h3>Lokale Leads finden, prüfen und ins CRM übernehmen</h3><a href="#" id="man">Unternehmen manuell hinzufügen</a></div>
+    <form id="lff" class="row" style="align-items:flex-end"><label class="grow">Suchbegriff / Branche<input name="query" required placeholder="z. B. Dachdecker, Zahnarzt, Fahrschule" value="${e(last?.q?.query || '')}"></label>
+    <label class="grow">Standort<input name="location" required placeholder="z. B. Haren (Ems)" value="${e(last?.q?.location || SETTINGS.default_location || '')}"></label>
+    <label>Radius<select name="radius_km" style="width:auto">${[1, 2, 5, 10, 20, 30, 50].map((k) => `<option value="${k}" ${k == (last?.q?.radius_km || 5) ? 'selected' : ''}>${k} km</option>`).join('')}</select></label>
+    <button class="btn primary" id="sb" ${SETTINGS.places_key ? '' : 'disabled'}>Suchen</button></form>
+    ${SETTINGS.places_key ? '' : '<p class="small warn mt">Für den Lead-Finder wird ein Google-Places-API-Schlüssel benötigt (<code>GOOGLE_PLACES_API_KEY</code>, siehe README).</p>'}</div>
+    <div id="lfr">${last ? '' : empty('📍', 'Entdecke qualifizierte Leads in deiner Umgebung', 'Echte Unternehmen aus Google Maps – mit Bewertung, Website-Status und Potenzial. Speichern, prüfen und direkt als Lead anlegen.')}</div>`;
+  $('#man').onclick = (ev) => { ev.preventDefault(); manualAuditModal(); };
+  const show = (data) => {
+    const rows = data.results; const sel = new Set();
+    const filt = J(sessionStorage.getItem('lff'), {}) || {};
+    const vis = rows.filter((p) => (!filt.noweb || !p.website) && (!filt.lowrating || (p.rating ?? 0) < 4.5));
+    $('#lfr').innerHTML = `<div class="card mb" style="padding:0;overflow:hidden"><div id="lmap" style="height:380px"></div></div>
+      <div class="card tablewrap"><div class="row mb"><b>${vis.length} von ${rows.length} Unternehmen</b><label class="check"><input type="checkbox" id="fnw" ${filt.noweb ? 'checked' : ''}> nur ohne Website</label>
+      <label class="check"><input type="checkbox" id="flr" ${filt.lowrating ? 'checked' : ''}> Bewertung unter 4,5</label><span class="grow"></span>
+      <button class="btn" id="addSel" disabled>Ausgewählte hinzufügen</button><button class="btn primary" id="addChk" disabled>Hinzufügen & prüfen</button></div>
+      <table><tr><th><input type="checkbox" id="all"></th><th>Unternehmen</th><th class="num">Potenzial</th><th>Google</th><th>Website</th><th class="num">Entfernung</th><th>Status</th><th></th></tr>
+      ${vis.map((p, i) => `<tr><td>${p.prospect ? '' : `<input type="checkbox" class="sel" value="${i}">`}</td><td><b>${e(p.name)}</b><div class="small sub">${e(p.category)} · ${e(p.address)}</div></td>
+        <td class="num" title="${e(p.potential.why.join(', '))}">${potBadge(p.potential.score)}</td><td>${starTxt(p.rating, p.review_count)}</td>
+        <td>${p.website ? `<a href="${e(p.website)}" target="_blank" rel="noopener">Ja ↗</a>` : '<b class="bad">Nein</b>'}</td><td class="num">${String(p.distance_km).replace('.', ',')} km</td>
+        <td>${p.prospect ? `<span class="badge won">${e(PSTATUS[p.prospect.status] || p.prospect.status)}</span>` : '<span class="sub small">Nicht hinzugefügt</span>'}</td>
+        <td class="num">${p.prospect ? '' : `<button class="btn sm" data-add="${i}">+ Hinzufügen</button>`}</td></tr>`).join('')}</table></div>`;
+    const setFilt = (k, val) => { filt[k] = val; sessionStorage.setItem('lff', JSON.stringify(filt)); show(data); };
+    $('#fnw').onchange = (ev) => setFilt('noweb', ev.target.checked); $('#flr').onchange = (ev) => setFilt('lowrating', ev.target.checked);
+    const upd = () => { sel.clear(); $$('.sel:checked').forEach((c) => sel.add(Number(c.value))); $('#addSel').disabled = $('#addChk').disabled = !sel.size; };
+    $$('.sel').forEach((c) => (c.onchange = upd)); $('#all').onchange = (ev) => { $$('.sel').forEach((c) => (c.checked = ev.target.checked)); upd(); };
+    const add = async (idx, audit) => {
+      const items = idx.map((i) => ({ ...vis[i], potential: undefined, prospect: undefined }));
+      const r = await POST('/api/prospects', { items, audit });
+      toast(`${r.added} Interessent(en) hinzugefügt${audit ? ' und geprüft' : ''}${r.items.some((x) => x.error) ? ' – einige Checks fehlgeschlagen' : ''}`);
+      const again = await POST('/api/prospects/search', data.q); again.q = data.q; sessionStorage.setItem('lf', JSON.stringify(again)); show(again);
+    };
+    $$('[data-add]').forEach((b) => (b.onclick = safe(async () => { b.disabled = true; await add([Number(b.dataset.add)], false); })));
+    $('#addSel').onclick = safe(async () => { $('#addSel').disabled = true; await add([...sel], false); });
+    $('#addChk').onclick = safe(async () => { $('#addChk').disabled = true; $('#addChk').textContent = `⏳ Prüfe ${sel.size} …`; await add([...sel], true); });
+    loadLeaflet().then((L) => {
+      const m = L.map('lmap').setView([data.center.lat, data.center.lng], 12);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(m);
+      L.circle([data.center.lat, data.center.lng], { radius: (data.q.radius_km || 5) * 1000, color: '#2563eb', weight: 1, fillOpacity: 0.04 }).addTo(m);
+      const pts = vis.filter((p) => p.lat != null).map((p) => { L.marker([p.lat, p.lng], { icon: pin(p.prospect ? '#16a34a' : !p.website ? '#dc2626' : '#2563eb', p.potential.score) }).addTo(m)
+        .bindPopup(`<b>${e(p.name)}</b><br>${e(p.address)}<br>${p.website ? 'Website ✓' : '<b>Keine Website</b>'} · ${p.rating ?? '–'}★`); return [p.lat, p.lng]; });
+      if (pts.length) m.fitBounds(pts, { padding: [30, 30], maxZoom: 14 });
+    }).catch(() => { $('#lmap').outerHTML = '<p class="sub" style="padding:12px">Karte konnte nicht geladen werden.</p>'; });
+  };
+  if (last) show(last);
+  $('#lff').onsubmit = safe(async (ev) => {
+    ev.preventDefault(); const q = formData(ev.target); q.radius_km = Number(q.radius_km);
+    $('#sb').disabled = true; $('#sb').textContent = 'Suche …';
+    try { const data = await POST('/api/prospects/search', q); data.q = q; sessionStorage.setItem('lf', JSON.stringify(data)); show(data); }
+    finally { $('#sb').disabled = false; $('#sb').textContent = 'Suchen'; }
+  });
+}
+
+async function agentsView(v) {
+  const list = await GET('/api/agents');
+  v.innerHTML = `<div class="card mb"><div class="row between"><div><h3>Prospect-Agent – findet rund um die Uhr neue Interessenten</h3>
+    <p class="sub small" style="margin:4px 0 0">Durchsucht regelmäßig Google Maps nach deiner Zielbranche, prüft neue Unternehmen automatisch, legt sie im CRM an und schreibt auf Wunsch einen Anschreiben-Entwurf.</p></div>
+    <button class="btn primary" id="add" ${SETTINGS.places_key ? '' : 'disabled title="GOOGLE_PLACES_API_KEY fehlt"'}>+ Agent erstellen</button></div></div>
+  ${list.length ? `<div class="grid g2">${list.map((g) => { const r = J(g.last_result, null);
+    return `<div class="card"><div class="row between"><h3>🤖 ${e(g.name)}</h3>${g.active ? '<span class="badge published">aktiv</span>' : '<span class="badge">pausiert</span>'}</div>
+    <p class="sub">„${e(g.query)}“ in ${e(g.location)} (${String(g.radius_km).replace('.', ',')} km) · ${g.frequency === 'daily' ? 'täglich' : 'jeden ' + ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'][g.weekday]} um ${e(g.time)}</p>
+    <div class="row small">${g.only_no_website ? '<span class="tag">nur ohne Website</span>' : ''}${g.min_potential ? `<span class="tag">Potenzial ≥ ${g.min_potential}</span>` : ''}<span class="tag">max. ${g.max_per_run} pro Lauf</span>
+      ${g.auto_audit ? '<span class="tag">prüft automatisch</span>' : ''}${g.auto_crm ? '<span class="tag">legt Leads an</span>' : ''}${g.auto_outreach ? '<span class="tag">schreibt Entwürfe</span>' : ''}</div>
+    <p class="small mt">${r ? `Letzter Lauf ${dt(r.at)}: ${r.found} gefunden, <b>${r.new} neu</b>, ${r.audited} geprüft, ${r.crm} ins CRM${r.errors.length ? ` · <span class="bad">${r.errors.length} Fehler</span>` : ''}` : 'Noch nicht gelaufen.'} · insgesamt ${g.prospect_count} Interessenten</p>
+    ${r?.errors?.length ? `<details class="small"><summary>Fehler</summary>${r.errors.map((x) => `<div class="bad">${e(x)}</div>`).join('')}</details>` : ''}
+    <div class="row mt"><button class="btn sm primary" data-run="${g.id}">▶ Jetzt ausführen</button><button class="btn sm" data-ed="${g.id}">Bearbeiten</button><a class="btn sm" href="#/audits" onclick="sessionStorage.setItem('pfil',JSON.stringify({source:'agent'}))">Ergebnisse</a></div></div>`; }).join('')}</div>`
+    : empty('🤖', 'Noch kein Agent', 'Beispiel: jeden Montag Dachdecker im Umkreis von 20 km ohne eigene Website suchen, prüfen und als Lead anlegen.')}`;
+  const am = (g) => { modal(g.id ? 'Agent bearbeiten' : 'Prospect-Agent erstellen', `<form class="form">
+    ${field('Name *', 'name', g.name || '', 'text', 'required placeholder="Handwerker Emsland"')}${field('Suchbegriff *', 'query', g.query || '', 'text', 'required placeholder="Dachdecker"')}
+    ${field('Standort *', 'location', g.location || SETTINGS.default_location || '', 'text', 'required placeholder="Haren (Ems)"')}${select('Radius', 'radius_km', [1, 2, 5, 10, 20, 30, 50].map((k) => [k, k + ' km']), g.radius_km || 10)}
+    ${select('Häufigkeit', 'frequency', [['weekly', 'Wöchentlich'], ['daily', 'Täglich']], g.frequency || 'weekly')}${select('Wochentag', 'weekday', [1, 2, 3, 4, 5, 6, 0].map((d) => [d, ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'][d]]), g.weekday ?? 1)}
+    <label>Uhrzeit<input type="time" name="time" value="${e(g.time || '07:00')}"></label>${field('Max. neue Interessenten pro Lauf', 'max_per_run', g.max_per_run ?? 10, 'number', 'min="1" max="60"')}
+    ${field('Mindest-Potenzial (0–100)', 'min_potential', g.min_potential ?? 0, 'number', 'min="0" max="100"')}<span></span>
+    <div class="full choices">${[['only_no_website', 'Nur Unternehmen ohne Website'], ['auto_audit', 'Automatisch Website-Check erstellen'], ['auto_crm', 'Automatisch als Lead ins CRM'], ['auto_outreach', 'Anschreiben-Entwurf erstellen'], ['active', 'Agent aktiv']]
+      .map(([k, t]) => `<label><input type="checkbox" name="${k}" ${g[k] ?? (k === 'active' || k === 'auto_audit') ? 'checked' : ''}> ${t}</label>`).join('')}</div>
+    <p class="full small sub">Jeder Lauf kostet Google-Places-Abfragen (ca. 4 pro Suche + 3 pro geprüftem Unternehmen).</p>
+    <div class="actions">${g.id ? '<button type="button" class="btn danger" id="del">Löschen</button><span class="grow"></span>' : ''}<button class="btn primary">Speichern</button></div></form>`,
+  async (d) => { for (const k of ['only_no_website', 'auto_audit', 'auto_crm', 'auto_outreach', 'active']) d[k] = d[k] ? 1 : 0;
+    await (g.id ? PUT('/api/agents/' + g.id, d) : POST('/api/agents', d)); toast('Agent gespeichert'); render(); });
+    if (g.id) $('#del').onclick = safe(async () => { if (confirm('Agent löschen?')) { await DEL('/api/agents/' + g.id); closeModal(); render(); } }); };
+  $('#add').onclick = () => am({});
+  $$('[data-ed]').forEach((b) => (b.onclick = () => am(list.find((g) => g.id == b.dataset.ed))));
+  $$('[data-run]').forEach((b) => (b.onclick = safe(async () => { b.disabled = true; b.textContent = '⏳ läuft …'; const r = await POST(`/api/agents/${b.dataset.run}/run`);
+    toast(`${r.found} gefunden, ${r.new} neu, ${r.audited} geprüft${r.errors.length ? ', ' + r.errors.length + ' Fehler' : ''}`, !!r.errors.length && !r.new); render(); })));
+}
+
+async function widgetView(v) {
+  const a = await GET('/api/analytics?months=12');
+  const snippet = `<div id="webhafen-check"></div>\n<script src="${baseUrl()}/widget.js" async></script>`;
+  v.innerHTML = `<div class="grid g2"><div class="card"><h3>Website-Check-Widget für deine Website</h3>
+    <p class="sub">Besucher deiner Website prüfen ihre eigene Seite kostenlos – du bekommst einen Kontakt <b>mit Einwilligung</b>, einen fertigen Bericht und einen Lead in der Pipeline.</p>
+    <div class="code">${e(snippet)}</div><div class="row mt"><button class="btn" id="cp">Code kopieren</button><a class="btn" href="/widget" target="_blank">Vorschau ↗</a></div>
+    <p class="small sub mt">Schutz: Honeypot gegen Bots, max. 3 Checks pro Besucher und Stunde, 50 pro Tag. Unter Einstellungen kannst du einen Link zu deiner Datenschutzerklärung hinterlegen.</p></div>
+    <div class="card" style="padding:0;overflow:hidden"><iframe src="/widget" style="width:100%;height:560px;border:0" title="Widget-Vorschau"></iframe></div></div>
+    <div class="card mt tablewrap"><h3 class="mb">Neueste Widget-Einreichungen</h3>${a.widget.length ? `<table><tr><th>Datum</th><th>Name</th><th>Unternehmen & Website</th><th>E-Mail</th><th>Telefon</th><th class="num">Ergebnis</th></tr>
+    ${a.widget.map((w) => `<tr><td>${dt(w.created_at)}</td><td>${e(w.name)}</td><td>${e(w.business_name)}<div class="small sub">${e(w.url)}</div></td><td><a href="mailto:${e(w.email)}">${e(w.email)}</a></td><td>${e(w.phone)}</td>
+    <td class="num">${w.audit_id ? `<a href="#/audits/${w.audit_id}" class="${tone(w.score)}"><b>${w.score}%</b></a>` : `<span class="bad small">${e(w.error || '–')}</span>`}</td></tr>`).join('')}</table>` : '<p class="sub">Noch keine Einreichungen.</p>'}</div>`;
+  $('#cp').onclick = () => copy(snippet);
+}
+
+const SRC_COL = { manuell: '#64748b', 'lead-finder': '#2563eb', agent: '#7c3aed', widget: '#16a34a' };
+function donut(parts) {
+  const total = parts.reduce((s, p) => s + p.n, 0); let acc = 0; const C = 2 * Math.PI * 40;
+  return `<svg viewBox="0 0 100 100" width="170" height="170"><circle cx="50" cy="50" r="40" fill="none" stroke="var(--soft)" stroke-width="14"/>
+    ${total ? parts.filter((p) => p.n).map((p) => { const len = (p.n / total) * C; const s = `<circle cx="50" cy="50" r="40" fill="none" stroke="${p.c}" stroke-width="14" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-acc}" transform="rotate(-90 50 50)"/>`; acc += len; return s; }).join('') : ''}
+    <text x="50" y="55" text-anchor="middle" font-size="16" font-weight="700" fill="currentColor">${total}</text></svg>`;
+}
+async function analyticsView(v) {
+  const months = Number(sessionStorage.getItem('anm') || 6);
+  const a = await GET('/api/analytics?months=' + months);
+  const mlabel = (k) => new Date(k + '-15').toLocaleDateString('de-DE', { month: 'short', year: '2-digit' });
+  const maxR = Math.max(1, ...a.reports_by_month.map((r) => Object.keys(SRC).reduce((s, k) => s + r[k], 0)));
+  const maxV = Math.max(1, ...a.views_by_month.map((r) => r.views));
+  v.innerHTML = `<div class="row mb"><h2 class="grow">Analytics</h2><select id="anm" style="width:auto">${[3, 6, 12, 24].map((m) => `<option value="${m}" ${m === months ? 'selected' : ''}>Letzte ${m} Monate</option>`).join('')}</select></div>
+  <div class="grid g4"><div class="card kpi"><div class="l">Erstellte Berichte</div><div class="v">${a.totals.reports}</div></div>
+    <div class="card kpi"><div class="l">Kontakte erstellt</div><div class="v">${a.totals.contacts}</div><div class="s">aus Interessenten</div></div>
+    <div class="card kpi"><div class="l">Neue Interessenten pro Woche</div><div class="v">${String(a.totals.per_week).replace('.', ',')}</div><div class="s">${a.totals.prospects} im Zeitraum</div></div>
+    <div class="card kpi"><div class="l">Berichtsaufrufe</div><div class="v">${a.totals.views}</div><div class="s">durch Interessenten</div></div></div>
+  <div class="grid g2 mt"><div class="card"><h3>Erstellte Berichte nach Quelle</h3><div class="legend mt">${Object.entries(SRC).map(([k, t]) => `<span><i style="background:${SRC_COL[k]}"></i>${t}</span>`).join('')}</div>
+    <div class="vbars">${a.reports_by_month.map((r) => `<div data-t="${mlabel(r.month)}: ${Object.keys(SRC).reduce((s2, k) => s2 + r[k], 0)} Berichte" style="background:none;display:flex;flex-direction:column-reverse;height:100%">${Object.keys(SRC).map((k) => `<span style="display:block;height:${(r[k] / maxR) * 100}%;background:${SRC_COL[k]}" title="${mlabel(r.month)} · ${SRC[k]}: ${r[k]}"></span>`).join('')}</div>`).join('')}</div>
+    <div class="xlabels">${a.months.map((k) => `<span>${mlabel(k)}</span>`).join('')}</div></div>
+    <div class="card"><h3>Berichtsaufrufe</h3><div class="vbars mt">${a.views_by_month.map((r) => `<div style="height:${(r.views / maxV) * 100}%" data-t="${mlabel(r.month)}: ${r.views} Aufrufe"></div>`).join('')}</div>
+    <div class="xlabels">${a.months.map((k) => `<span>${mlabel(k)}</span>`).join('')}</div></div></div>
+  <div class="grid g2 mt"><div class="card"><h3>Kontakte nach Quelle</h3><div class="row mt" style="gap:24px">${donut(a.contacts_by_source.map((c) => ({ n: c.n, c: SRC_COL[c.source] })))}
+    <div>${a.contacts_by_source.map((c) => `<div class="mb"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${SRC_COL[c.source]};margin-right:6px"></i>${SRC[c.source]}: <b>${c.n}</b></div>`).join('')}</div></div></div>
+    <div class="card tablewrap"><h3 class="mb">Meistgesehene Berichte</h3>${a.top_reports.length ? `<table><tr><th>Unternehmen</th><th class="num">Wertung</th><th class="num">Aufrufe</th><th>Zuletzt</th></tr>${a.top_reports.map((r) => `<tr><td><a href="#/audits/${r.id}">${e(r.business_name)}</a></td><td class="num ${tone(r.score)}">${r.score}%</td><td class="num"><b>${r.views}</b></td><td>${dt(r.last_view)}</td></tr>`).join('')}</table>` : '<p class="sub">Noch keine Aufrufe. Aufrufe zählen, sobald ein Interessent den geteilten Link öffnet.</p>'}</div></div>`;
+  $('#anm').onchange = (ev) => { sessionStorage.setItem('anm', ev.target.value); render(); };
+}
+
 async function auditDetail(v, id) {
   const a = await GET('/api/audits/' + id); const r = a.result;
   const link = `${baseUrl()}/bericht/${a.token}`;
-  v.innerHTML = `<div class="row mb"><a href="#/audits">‹ Interessenten</a><span class="grow"></span><button class="btn" id="lead">🎯 Als Lead anlegen</button><a class="btn" href="/bericht/${e(a.token)}" target="_blank">↗ Öffnen / PDF</a>
+  const place = r.meta?.place;
+  v.innerHTML = `<div class="row mb"><a href="#/audits">‹ Interessenten</a><span class="grow"></span><span class="sub small">👁 ${a.views} Aufrufe</span>
+    ${a.prospect ? `<button class="btn" id="mail">✉ Anschreiben</button>` : ''}<button class="btn" id="lead">🎯 Als Lead anlegen</button><a class="btn" href="/bericht/${e(a.token)}?vorschau=1" target="_blank">↗ Öffnen / PDF</a>
     <button class="btn" id="re">↻ Neu prüfen</button><button class="btn danger" id="del">🗑</button><button class="btn primary" id="share">Bericht teilen</button></div>
-  <div class="grid" style="grid-template-columns:280px 1fr;align-items:start"><div class="card"><h3>${e(a.business_name)}</h3><p class="small sub">${e(a.industry)} · ${dt(a.created_at)}</p>
-    <table class="mt"><tr><td><b>Gesamtwertung</b></td><td class="num"><b>${a.score}%</b></td></tr>${r.categories.map((c) => `<tr><td>${e(c.name)}</td><td class="num ${c.score >= 80 ? 'good' : c.score >= 50 ? 'warn' : 'bad'}">${c.score ?? '–'}%</td></tr>`).join('')}</table>
-    <p class="small mt">🌐 <a href="${e(r.url)}" target="_blank" rel="noopener">${e(r.url)}</a><br>${a.address ? '📍 ' + e(a.address) + '<br>' : ''}${a.phone ? '📞 ' + e(a.phone) + '<br>' : ''}${r.meta.cms?.length ? '🧩 ' + e(r.meta.cms.join(', ')) : ''}</p>
+  <div class="grid" style="grid-template-columns:minmax(240px,280px) 1fr;align-items:start"><div><div class="card"><h3>${e(a.business_name)}</h3><p class="small sub">${e(a.industry)} · ${dt(a.created_at)}</p>
+    <table class="mt"><tr><td><b>Gesamtwertung</b></td><td class="num"><b>${a.score}%</b></td></tr>${r.categories.map((c) => `<tr><td>${e(c.name)}</td><td class="num ${tone(c.score)}">${c.score ?? '–'}%</td></tr>`).join('')}</table>
+    <p class="small mt">${r.url ? `🌐 <a href="${e(r.url)}" target="_blank" rel="noopener">${e(r.url)}</a><br>` : '🌐 <b class="bad">keine Website</b><br>'}${a.address ? '📍 ' + e(a.address) + '<br>' : ''}${a.phone ? '📞 ' + e(a.phone) + '<br>' : ''}${r.meta.cms?.length ? '🧩 ' + e(r.meta.cms.join(', ')) : ''}</p>
     ${r.notes?.length ? `<p class="small sub">${r.notes.map(e).join('<br>')}</p>` : ''}</div>
-    <iframe class="report-frame" src="/bericht/${e(a.token)}" title="Bericht"></iframe></div>`;
+    <div class="card mt"><h3>Lokale SEO-Heatmap</h3>${place?.lat ? `<form id="hf" class="mt" style="display:grid;gap:10px">${field('Suchbegriff', 'keyword', a.heatmaps[0]?.keyword || a.industry || place.category || '', 'text', 'required')}
+      ${select('Raster', 'size', [[3, '3 × 3 (9 Punkte)'], [5, '5 × 5 (25 Punkte)'], [7, '7 × 7 (49 Punkte)']], 3)}${select('Abdeckung', 'radius_km', [[1, '1 km'], [2, '2 km'], [3, '3 km'], [5, '5 km'], [10, '10 km']], 3)}
+      <button class="btn primary" id="hgo">🔍 Lokalen Scan ausführen</button><p class="small sub" style="margin:0">Jeder Rasterpunkt ist eine Google-Places-Abfrage.</p></form>
+      ${a.heatmaps.length ? `<p class="small mt">Gespeichert: ${a.heatmaps.map((h) => `„${e(h.keyword)}“ Ø ${String(h.avg_rank).replace('.', ',')}`).join(', ')}</p>` : ''}`
+      : '<p class="small sub">Verfügbar, sobald das Google-Unternehmensprofil gefunden wurde (<code>GOOGLE_PLACES_API_KEY</code>).</p>'}</div></div>
+    <iframe class="report-frame" id="rf" src="/bericht/${e(a.token)}?vorschau=1" title="Bericht"></iframe></div>`;
   $('#share').onclick = () => copy(link);
   $('#del').onclick = safe(async () => { if (confirm('Check löschen?')) { await DEL('/api/audits/' + id); location.hash = '#/audits'; } });
-  $('#lead').onclick = safe(async () => { await POST(`/api/audits/${id}/to-lead`); toast('Kontakt & Lead angelegt'); });
-  $('#re').onclick = safe(async () => { $('#re').disabled = true; const n = await POST('/api/audits', { business_name: a.business_name, url: a.url, industry: a.industry, phone: a.phone, address: a.address }); location.hash = '#/audits/' + n.id; });
+  $('#lead').onclick = safe(async () => { const x = await POST(`/api/audits/${id}/to-lead`); toast(x.existed ? 'War bereits im CRM' : 'Kontakt & Lead angelegt'); });
+  if (a.prospect) $('#mail').onclick = () => outreachModal(a.prospect);
+  $('#re').onclick = safe(async () => { $('#re').disabled = true; $('#re').textContent = '⏳ Prüfe …';
+    const n = a.prospect ? await POST(`/api/prospects/${a.prospect.id}/audit`) : await POST('/api/audits', { business_name: a.business_name, url: a.url, industry: a.industry, phone: a.phone, address: a.address });
+    location.hash = '#/audits/' + n.id; });
+  if ($('#hf')) $('#hf').onsubmit = safe(async (ev) => { ev.preventDefault(); const d = formData(ev.target); $('#hgo').disabled = true; $('#hgo').textContent = '⏳ Scanne …';
+    try { const h = await POST(`/api/audits/${id}/heatmap`, d); toast(`Ø Position ${String(h.avg_rank).replace('.', ',')} · Top 3 an ${h.score} % der Punkte`); render(); }
+    finally { if ($('#hgo')) { $('#hgo').disabled = false; $('#hgo').textContent = '🔍 Lokalen Scan ausführen'; } } });
 }
 
 // ===== Einstellungen =====
@@ -640,6 +845,7 @@ VIEWS.einstellungen = async (v) => {
     ${field('Agenturname', 'agency_name', SETTINGS.agency_name, 'text', 'placeholder="Webhafen – Webdesign & Entwicklung"')}${field('Website', 'agency_website', SETTINGS.agency_website, 'text', 'placeholder="web-hafen.de"')}
     ${field('E-Mail', 'agency_email', SETTINGS.agency_email, 'email')}${field('Telefon', 'agency_phone', SETTINGS.agency_phone, 'tel')}
     <label>Markenfarbe<input type="color" name="brand_color" value="${e(SETTINGS.brand_color || '#2563eb')}" style="height:40px"></label>${field('Link für „Kontakt aufnehmen“', 'cta_url', SETTINGS.cta_url, 'url', 'placeholder="https://web-hafen.de/kontakt (sonst mailto)"')}
+    ${field('Link zur Datenschutzerklärung (Widget)', 'privacy_url', SETTINGS.privacy_url, 'url', 'placeholder="https://web-hafen.de/datenschutz"')}${field('Standard-Standort für die Lead-Suche', 'default_location', SETTINGS.default_location, 'text', 'placeholder="Haren (Ems)"')}
     <h3>System</h3><div class="full">${field('Öffentliche Adresse dieser App', 'public_url', SETTINGS.public_url, 'url', `placeholder="${location.origin}"`)}<p class="small sub">Wird für Affiliate-, Kurz- und Berichtslinks verwendet.</p></div>
     <div class="actions"><button class="btn primary">Speichern</button></div></form>
     <div class="card"><h3>Affiliate-API</h3><p class="sub small">Meldet deine Website, dein Shop oder ein Formular-Tool einen Verkauf, wird die Provision automatisch berechnet.</p>
@@ -649,7 +855,7 @@ Content-Type: application/json
 
 { "key": "${e(SETTINGS.aff_api_key || 'API-SCHLÜSSEL')}", "ref": "CODE-aus-?ref=", "amount": 499.00,
   "customer_name": "Max Muster", "customer_email": "max@example.de" }</div>
-    <h3 class="mt">Optionale Google-Schlüssel</h3><p class="small">${SETTINGS.places_key ? '✅' : '⬜'} <code>GOOGLE_PLACES_API_KEY</code> – Google-Profil & Bewertungen im Website-Check<br>${SETTINGS.pagespeed_key ? '✅' : '⬜'} <code>PAGESPEED_API_KEY</code> – höheres Kontingent für PageSpeed-Messungen</p>
+    <h3 class="mt">Optionale API-Schlüssel</h3><p class="small">${SETTINGS.places_key ? '✅' : '⬜'} <code>GOOGLE_PLACES_API_KEY</code> – Google-Profil & Bewertungen im Website-Check<br>${SETTINGS.pagespeed_key ? '✅' : '⬜'} <code>PAGESPEED_API_KEY</code> – eigenes Kontingent für PageSpeed-Messungen<br>${SETTINGS.ai_key ? '✅' : '⬜'} <code>ANTHROPIC_API_KEY</code> – Claude schreibt individuelle Anschreiben-Entwürfe</p>
     <p class="small sub">Werden als Umgebungsvariablen beim Start gesetzt (siehe README).</p></div></div>`;
   $('#sf').onsubmit = safe(async (ev) => { ev.preventDefault(); SETTINGS = { ...SETTINGS, ...(await PUT('/api/settings', formData(ev.target))) }; document.documentElement.style.setProperty('--accent', SETTINGS.brand_color); toast('Gespeichert'); });
   $('#gen').onclick = safe(async () => { if (SETTINGS.aff_api_key && !confirm('Alter Schlüssel wird ungültig. Fortfahren?')) return;

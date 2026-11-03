@@ -120,81 +120,141 @@ export function analyzeHtml(html, { url, headers = {}, ms = 0, httpRedirectsToHt
       ].map((c) => ({ ...c, detail: c.detail ?? (c.ok ? 'In Ordnung' : 'Unverschlüsselte Ressourcen auf einer HTTPS-Seite gefunden') })),
     },
   ];
-  return { categories, meta: { title, metaDesc, cms: generator ? [generator, ...cms] : cms, chat, sizeKb, ms, scripts } };
+  return { categories, meta: { title, metaDesc, cms: generator ? [generator, ...cms] : cms, chat, sizeKb, ms, scripts, htmlDigits: html.replace(/\D/g, '') } };
 }
 
-async function pageSpeed(url, key) {
-  const q = new URLSearchParams({ url, strategy: 'mobile', category: 'performance' });
+async function pageSpeed(url, strategy, key) {
+  const q = new URLSearchParams({ url, strategy });
+  for (const c of ['performance', 'seo', 'accessibility', 'best-practices']) q.append('category', c);
   if (key) q.set('key', key);
-  const r = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${q}`, { signal: AbortSignal.timeout(60000) });
-  if (!r.ok) throw new Error(`PageSpeed ${r.status}`);
+  const r = await fetch(`${process.env.PAGESPEED_BASE_URL || 'https://www.googleapis.com/pagespeedonline/v5'}/runPagespeed?${q}`, { signal: AbortSignal.timeout(90000) });
+  if (!r.ok) throw new Error(`PageSpeed ${r.status}${r.status === 429 ? ' (Kontingent erschöpft – PAGESPEED_API_KEY setzen)' : ''}`);
   const j = await r.json();
-  const a = j.lighthouseResult?.audits || {};
+  const lh = j.lighthouseResult || {}; const a = lh.audits || {};
+  const cat = (k) => Math.round((lh.categories?.[k]?.score ?? 0) * 100);
+  const m = (k) => ({ value: a[k]?.displayValue || '–', score: Math.round((a[k]?.score ?? 0) * 100), ms: a[k]?.numericValue ?? null });
+  // Einzelprüfungen zählen wie im Lighthouse-Bericht
+  let failed = 0; let warn = 0; let passed = 0; const issues = [];
+  for (const x of Object.values(a)) {
+    if (!['numeric', 'binary'].includes(x.scoreDisplayMode) || x.score == null) continue;
+    if (x.score >= 0.9) passed++; else if (x.score >= 0.5) warn++; else { failed++; if (issues.length < 8) issues.push(x.title); }
+  }
   return {
-    score: Math.round((j.lighthouseResult?.categories?.performance?.score ?? 0) * 100),
-    lcp: a['largest-contentful-paint']?.displayValue, cls: a['cumulative-layout-shift']?.displayValue,
-    tbt: a['total-blocking-time']?.displayValue, fcp: a['first-contentful-paint']?.displayValue,
+    performance: cat('performance'), seo: cat('seo'), accessibility: cat('accessibility'), best_practices: cat('best-practices'),
+    fcp: m('first-contentful-paint'), lcp: m('largest-contentful-paint'), tbt: m('total-blocking-time'), cls: m('cumulative-layout-shift'), si: m('speed-index'),
+    failed, warn, passed, issues,
   };
 }
 
-async function googlePlace(name, address, key) {
-  const r = await fetch('https://places.googleapis.com/v1/places:searchText', {
-    method: 'POST', signal: AbortSignal.timeout(15000),
-    headers: { 'content-type': 'application/json', 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.displayName,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.regularOpeningHours,places.formattedAddress,places.photos,places.businessStatus,places.googleMapsUri' },
-    body: JSON.stringify({ textQuery: `${name} ${address}`.trim(), languageCode: 'de' }),
+const daysSince = (iso) => (iso ? (Date.now() - new Date(iso).getTime()) / 864e5 : null);
+
+function placeCategories(pl, finalUrl, ranking) {
+  const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+  const cats = [];
+  cats.push({
+    key: 'gbp', name: 'Google-Unternehmensprofil',
+    description: 'Ein vollständiges, aktives Google-Profil ist der wichtigste Faktor, um vor Ort gefunden zu werden.',
+    checks: pl ? [
+      check('Profil aktiv und sichtbar', pl.status === 'OPERATIONAL' || !pl.status, pl.status === 'OPERATIONAL' || !pl.status ? 'Das Profil ist aktiv und für Kunden sichtbar.' : `Status: ${pl.status}`),
+      check('Geschäftsadresse hinterlegt', !!pl.address, pl.address || 'Keine Adresse'),
+      check('Website im Profil hinterlegt', finalUrl ? !!pl.website && hostOf(pl.website) === hostOf(finalUrl) : !!pl.website, pl.website || 'Keine Website hinterlegt', 'Die eigene Website gehört ins Profil – sonst landen Interessenten bei Verzeichnissen oder der Konkurrenz.'),
+      check('Telefonnummer im Profil', !!pl.phone, pl.phone || 'Keine Telefonnummer'),
+      check('Öffnungszeiten gepflegt', pl.has_hours, pl.has_hours ? 'Vorhanden' : 'Fehlen', 'Fehlende Öffnungszeiten kosten Vertrauen – Google zeigt dann „Öffnungszeiten unbekannt“.'),
+      check('Mindestens 10 Fotos', pl.photos >= 10, `${pl.photos} Fotos gefunden (Google liefert max. 10)`, 'Profile mit vielen aktuellen Fotos erhalten deutlich mehr Anfragen und Routenplanungen.'),
+    ] : [check('Profil gefunden', false, 'Kein Google-Unternehmensprofil gefunden.', 'Ein eigenes Google-Unternehmensprofil anlegen und verifizieren – kostenlos und sehr wirksam.')],
   });
-  if (!r.ok) throw new Error(`Places ${r.status}`);
-  return (await r.json()).places?.[0] || null;
+  if (pl) {
+    const rv = pl.reviews || [];
+    const neg = rv.filter((r) => r.rating <= 2).length;
+    const newest = rv.map((r) => daysSince(r.published)).filter((d) => d != null).sort((a, b) => a - b)[0];
+    cats.push({
+      key: 'reputation', name: 'Online-Ruf',
+      description: 'Bewertungen sind für die meisten Kunden ausschlaggebend – Anzahl, Durchschnitt und Aktualität zählen.',
+      checks: [
+        check('Durchschnittsbewertung ≥ 4,5', (pl.rating || 0) >= 4.5, pl.rating ? `${String(pl.rating).replace('.', ',')} von 5 Sternen` : 'Noch keine Bewertungen', 'Zufriedene Kunden aktiv um eine Bewertung bitten – z. B. per QR-Code, Link in der Rechnung oder nach dem Termin.'),
+        check('Mindestens 25 Bewertungen', pl.review_count >= 25, `${pl.review_count} Bewertungen bei Google`, 'Mehr Bewertungen = mehr Vertrauen und besseres Ranking in Google Maps.'),
+        check('Aktuelle Bewertungen (letzte 90 Tage)', rv.length ? newest != null && newest <= 90 : null, newest != null ? `Neueste Bewertung: ${pl.reviews.find((r) => daysSince(r.published) === newest)?.when || Math.round(newest) + ' Tage'}` : 'Keine Bewertungen'),
+        check('Kaum negative Bewertungen', rv.length ? neg / rv.length <= 0.2 : null, rv.length ? `${neg} von ${rv.length} aktuellen Bewertungen mit 1–2 Sternen` : 'Keine Bewertungen'),
+      ],
+    });
+  }
+  if (ranking) {
+    cats.push({
+      key: 'local', name: 'Lokale Sichtbarkeit',
+      description: `So erscheint das Unternehmen in Google Maps, wenn jemand in der Nähe nach „${ranking.keyword}“ sucht.`,
+      checks: [
+        check(`Top 3 bei „${ranking.keyword}“`, ranking.rank != null && ranking.rank <= 3, ranking.rank ? `Platz ${ranking.rank} von ${ranking.results.length}` : `Nicht unter den ersten ${ranking.results.length} Treffern`, 'Nur die ersten 3 Treffer erscheinen im „Local Pack“ – dort landen die meisten Klicks.'),
+        (() => { const comp = ranking.results.filter((x) => x.place_id !== pl?.place_id).map((x) => x.review_count); const med = median(comp);
+          return check('Mehr Bewertungen als der Wettbewerb', comp.length ? (pl?.review_count || 0) >= med : null, `${pl?.review_count || 0} eigene Bewertungen · Median der Konkurrenz: ${med}`, 'Bewertungen sind einer der stärksten Ranking-Faktoren in Google Maps.'); })(),
+      ],
+    });
+  }
+  return cats;
 }
+const median = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : 0; };
 
-export async function runAudit({ url, business_name, phone = '', address = '' }, env = {}) {
-  url = normalizeUrl(url);
-  const main = await fetchTimed(url);
-  const finalUrl = main.r.url || url;
-  const headers = Object.fromEntries(main.r.headers);
-  const origin = new URL(finalUrl).origin;
-  const probe = async (u) => { try { const r = await fetch(u, { signal: AbortSignal.timeout(8000), headers: { 'user-agent': UA } }); return r.ok; } catch { return false; } };
-  const [robots, sitemap, httpRedirectsToHttps] = await Promise.all([
-    probe(origin + '/robots.txt'),
-    probe(origin + '/sitemap.xml').then((ok) => ok || probe(origin + '/sitemap_index.xml')),
-    (async () => {
-      try { const r = await fetch(finalUrl.replace(/^https:/, 'http:'), { redirect: 'manual', signal: AbortSignal.timeout(8000), headers: { 'user-agent': UA } });
-        return r.status >= 300 && r.status < 400 && /^https:/i.test(r.headers.get('location') || ''); } catch { return null; }
-    })(),
-  ]);
-  const res = analyzeHtml(main.body, { url: finalUrl, headers, ms: main.ms, httpRedirectsToHttps, robots, sitemap, phone });
-  const notes = [];
+export async function runAudit({ url, business_name, phone = '', address = '', place_id = '', industry = '' }, env = {}) {
+  const notes = []; let res; let finalUrl = '';
+  if (url) {
+    url = normalizeUrl(url);
+    const main = await fetchTimed(url);
+    finalUrl = main.r.url || url;
+    const headers = Object.fromEntries(main.r.headers);
+    const origin = new URL(finalUrl).origin;
+    const probe = async (u) => { try { const r = await fetch(u, { signal: AbortSignal.timeout(8000), headers: { 'user-agent': UA } }); return r.ok; } catch { return false; } };
+    const [robots, sitemap, httpRedirectsToHttps] = await Promise.all([
+      probe(origin + '/robots.txt'),
+      probe(origin + '/sitemap.xml').then((ok) => ok || probe(origin + '/sitemap_index.xml')),
+      (async () => {
+        try { const r = await fetch(finalUrl.replace(/^https:/, 'http:'), { redirect: 'manual', signal: AbortSignal.timeout(8000), headers: { 'user-agent': UA } });
+          return r.status >= 300 && r.status < 400 && /^https:/i.test(r.headers.get('location') || ''); } catch { return null; }
+      })(),
+    ]);
+    res = analyzeHtml(main.body, { url: finalUrl, headers, ms: main.ms, httpRedirectsToHttps, robots, sitemap, phone });
 
-  // Optional: Google PageSpeed (ohne Schlüssel mit geringem Kontingent)
-  try {
-    const ps = await pageSpeed(finalUrl, env.PAGESPEED_API_KEY);
-    res.meta.pagespeed = ps;
-    res.categories.find((c) => c.key === 'performance').checks.unshift(
-      check('PageSpeed-Wert (mobil)', ps.score >= 70, `${ps.score}/100 · LCP ${ps.lcp || '–'} · CLS ${ps.cls || '–'} · TBT ${ps.tbt || '–'}`, 'Google bewertet langsame mobile Seiten schlechter. Bilder komprimieren, Skripte reduzieren, Caching aktivieren.'));
-  } catch (e) { notes.push(`PageSpeed nicht verfügbar: ${e.message}`); }
+    // Google PageSpeed (mobil + Desktop); ohne Schlüssel nur mit kleinem Kontingent
+    const [mob, desk] = await Promise.allSettled([pageSpeed(finalUrl, 'mobile', env.PAGESPEED_API_KEY), pageSpeed(finalUrl, 'desktop', env.PAGESPEED_API_KEY)]);
+    if (mob.status === 'fulfilled' || desk.status === 'fulfilled') {
+      res.meta.pagespeed = { mobile: mob.value || null, desktop: desk.value || null };
+      const perf = res.categories.find((c) => c.key === 'performance').checks;
+      if (desk.value) perf.unshift(check('PageSpeed Desktop ≥ 80', desk.value.performance >= 80, `${desk.value.performance}/100 · LCP ${desk.value.lcp.value}`));
+      if (mob.value) perf.unshift(check('PageSpeed mobil ≥ 70', mob.value.performance >= 70, `${mob.value.performance}/100 · LCP ${mob.value.lcp.value} · CLS ${mob.value.cls.value} · TBT ${mob.value.tbt.value}`, 'Google bewertet langsame mobile Seiten schlechter. Bilder komprimieren, Skripte reduzieren, Caching aktivieren.'));
+      const seo = res.categories.find((c) => c.key === 'seo').checks;
+      if (mob.value) seo.unshift(check('Lighthouse-SEO-Wert ≥ 90', mob.value.seo >= 90, `${mob.value.seo}/100`));
+    }
+    for (const r of [mob, desk]) if (r.status === 'rejected') { notes.push(`PageSpeed nicht verfügbar: ${r.reason.message}`); break; }
+  } else {
+    // Unternehmen ohne eigene Website – der wichtigste Befund überhaupt
+    res = { meta: { cms: [], chat: [] }, categories: [{
+      key: 'website', name: 'Eigene Website', description: 'Ohne eigene Website fehlt der zentrale Anlaufpunkt für Kunden, Google und Werbung.',
+      checks: [check('Eigene Website vorhanden', false, 'Für dieses Unternehmen ist keine Website hinterlegt.', 'Eine schnelle, mobil optimierte Website mit Kontaktmöglichkeit ist die Grundlage jeder Online-Sichtbarkeit.')],
+    }] };
+  }
 
-  // Optional: Google-Unternehmensprofil & Bewertungen über Places API
+  // Google-Profil, Online-Ruf und lokales Ranking (nur mit Places-Schlüssel)
   if (env.GOOGLE_PLACES_API_KEY) {
     try {
-      const pl = await googlePlace(business_name, address, env.GOOGLE_PLACES_API_KEY);
-      res.meta.place = pl;
-      const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
-      res.categories.push({
-        key: 'gbp', name: 'Google-Unternehmensprofil & Bewertungen',
-        description: 'Wie Ihr Unternehmen in Google Maps und der lokalen Suche erscheint.',
-        checks: pl ? [
-          check('Profil gefunden', true, pl.displayName?.text + ' · ' + (pl.formattedAddress || '')),
-          check('Website im Profil hinterlegt', !!pl.websiteUri && hostOf(pl.websiteUri) === hostOf(finalUrl), pl.websiteUri || 'Keine Website hinterlegt'),
-          check('Telefonnummer im Profil', !!pl.nationalPhoneNumber, pl.nationalPhoneNumber || 'Keine Telefonnummer'),
-          check('Öffnungszeiten gepflegt', !!pl.regularOpeningHours, pl.regularOpeningHours ? 'Vorhanden' : 'Fehlen'),
-          check('Fotos vorhanden (mind. 5)', (pl.photos?.length || 0) >= 5, `${pl.photos?.length || 0} Fotos`),
-          check('Durchschnittsbewertung ≥ 4,5', (pl.rating || 0) >= 4.5, pl.rating ? `${String(pl.rating).replace('.', ',')} Sterne` : 'Keine Bewertungen'),
-          check('Mindestens 25 Bewertungen', (pl.userRatingCount || 0) >= 25, `${pl.userRatingCount || 0} Bewertungen`, 'Regelmäßig um Bewertungen bitten – z. B. per QR-Code oder Link nach dem Auftrag.'),
-        ] : [check('Profil gefunden', false, 'Kein Google-Unternehmensprofil gefunden.', 'Ein gepflegtes Unternehmensprofil ist der wichtigste Faktor für lokale Sichtbarkeit.')],
-      });
-    } catch (e) { notes.push(`Google-Profil nicht abrufbar: ${e.message}`); }
-  } else notes.push('Google-Unternehmensprofil nicht geprüft (GOOGLE_PLACES_API_KEY fehlt).');
+      const places = await import('./places.js');
+      const pid = place_id || await places.findBusiness(business_name, address);
+      const pl = pid ? await places.placeDetails(pid) : null;
+      let ranking = null;
+      if (pl?.lat != null) {
+        const keyword = industry || pl.category || business_name;
+        const rk = await places.rankAt({ keyword, lat: pl.lat, lng: pl.lng, placeId: pl.place_id, radiusM: 5000 });
+        ranking = { keyword, rank: rk.rank, results: rk.results.slice(0, 10).map((x) => ({ place_id: x.place_id, name: x.name, rating: x.rating, review_count: x.review_count, photos: x.photos, maps_url: x.maps_url })) };
+      }
+      res.meta.place = pl; res.meta.ranking = ranking;
+      res.categories.push(...placeCategories(pl, finalUrl, ranking));
+      // NAP: Telefonnummer der Website = Telefonnummer im Google-Profil?
+      if (pl?.phone && url) {
+        const tail = pl.phone.replace(/\D/g, '').slice(-7);
+        const biz = res.categories.find((c) => c.key === 'business');
+        biz?.checks.push(check('Telefonnummer wie im Google-Profil', res.meta.htmlDigits?.includes(tail) ?? null, res.meta.htmlDigits?.includes(tail) ? 'Website und Google-Profil nennen dieselbe Nummer.' : `Die Nummer aus dem Google-Profil (${pl.phone}) steht nicht auf der Startseite.`, 'Name, Adresse und Telefonnummer sollten überall identisch sein (NAP-Konsistenz).'));
+      }
+    } catch (e) { notes.push(`Google-Daten nicht abrufbar: ${e.message}`); }
+  } else notes.push('Google-Profil, Bewertungen und Ranking nicht geprüft (GOOGLE_PLACES_API_KEY fehlt).');
 
+  delete res.meta.htmlDigits;
   for (const c of res.categories) c.score = scoreOf(c.checks);
   const scored = res.categories.filter((c) => c.score !== null);
   const score = Math.round(scored.reduce((a, c) => a + c.score, 0) / (scored.length || 1));
