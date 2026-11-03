@@ -161,23 +161,16 @@ Lead in der Pipeline an.
 
 ## Betrieb auf einem Server
 
-Die App braucht einen Server, auf dem Node.js dauerhaft läuft (z. B. ein IONOS-VPS, Hetzner,
-Render, Railway oder Fly.io) – ein reines Webspace-Paket reicht **nicht**, weil der Planer im
-Hintergrund laufen muss. Beispiel mit systemd:
+Webhafen OS braucht einen Server, auf dem Node.js dauerhaft läuft (z. B. IONOS VPS Linux S+ mit
+Ubuntu 24.04) – ein reines Webspace-Paket reicht nicht, weil Planer und Prospect-Agent im Hintergrund laufen.
 
-```ini
-# /etc/systemd/system/webhafen-os.service
-[Service]
-WorkingDirectory=/opt/webhafen-os
-Environment=ADMIN_PASSWORD=… HTTPS=1 PORT=3000
-ExecStart=/usr/bin/npm start
-Restart=always
-[Install]
-WantedBy=multi-user.target
-```
+**Schritt-für-Schritt-Anleitung: [deploy/ANLEITUNG-SERVER.md](deploy/ANLEITUNG-SERVER.md)**
 
-Davor einen Reverse-Proxy mit HTTPS (z. B. Caddy: `os.web-hafen.de { reverse_proxy localhost:3000 }`)
-und unter Einstellungen die „Öffentliche Adresse“ eintragen.
+Kurzfassung: Repo nach `/opt/webhafen-os` klonen und `bash /opt/webhafen-os/deploy/install.sh` ausführen.
+Das Skript richtet Node.js 22, einen systemd-Dienst (läuft als eigener Benutzer, nur auf 127.0.0.1),
+Caddy mit automatischem HTTPS für `os.web-hafen.de`, Firewall (22/80/443), automatische
+Sicherheitsupdates, tägliche Backups (14 Tage) und den Befehl `webhafen-os-update` ein.
+Domain und E-Mail lassen sich überschreiben: `DOMAIN=… EMAIL=… bash deploy/install.sh`.
 
 ## Was (noch) fehlt
 

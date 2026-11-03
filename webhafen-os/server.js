@@ -510,8 +510,8 @@ export async function handle(req, res) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  http.createServer(handle).listen(PORT, () => {
-    console.log(`Webhafen OS läuft auf http://localhost:${PORT}`);
+  http.createServer(handle).listen(PORT, process.env.HOST || undefined, () => {
+    console.log(`Webhafen OS läuft auf http://${process.env.HOST || 'localhost'}:${PORT}`);
     if (!PASSWORD) console.warn('⚠  ADMIN_PASSWORD ist nicht gesetzt – die App ist ohne Login erreichbar. Nur lokal so betreiben!');
   });
   let busy = false;
