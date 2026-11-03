@@ -1,4 +1,5 @@
 import { esc } from './util.js';
+import { LOGO } from './brand.js';
 
 const tone = (s) => (s == null ? 'muted' : s >= 80 ? 'good' : s >= 50 ? 'warn' : 'bad');
 const verdict = (s) => (s >= 80 ? 'Sehr gut aufgestellt' : s >= 50 ? 'Raum für Verbesserungen' : 'Dringender Handlungsbedarf');
@@ -77,11 +78,11 @@ export function renderReport(a, s) {
   return `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Online-Check: ${esc(a.business_name)}</title><meta name="robots" content="noindex">
 <style>
-:root{--bg:#f4f6fb;--card:#fff;--text:#0f172a;--sub:#64748b;--line:#e2e8f0;--track:#e5e7eb;--good:#16a34a;--warn:#d97706;--bad:#dc2626;--muted:#94a3b8;--accent:${esc(s.brand_color || '#2563eb')}}
+:root{--bg:#f4f6fb;--card:#fff;--text:#0f172a;--sub:#64748b;--line:#e2e8f0;--track:#e5e7eb;--good:#16a34a;--warn:#d97706;--bad:#dc2626;--muted:#94a3b8;--accent:${esc(s.brand_color || '#0B4AA0')}}
 @media (prefers-color-scheme:dark){:root{--bg:#0b1120;--card:#111a2e;--text:#e2e8f0;--sub:#94a3b8;--line:#1e293b;--track:#1e293b}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 .wrap{max-width:1040px;margin:0 auto;padding:24px 16px 64px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:18px}
-.agency{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between}.agency h2{margin:0;font-size:18px}.agency small{color:var(--sub)}
+.agency{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between}.agency small{display:block;margin-top:6px}.ag-logo{color:var(--text);text-decoration:none}.logo-lockup{display:inline-flex;gap:9px;align-items:center}.logo-mark{width:42px;height:32px;overflow:visible}.logo-word{height:20px;width:auto}.agency h2{margin:0;font-size:18px}.agency small{color:var(--sub)}
 .btn{display:inline-block;background:var(--accent);color:#fff;text-decoration:none;padding:10px 18px;border-radius:9px;font-weight:600}
 h1{font-size:26px;margin:0 0 4px}.sub{color:var(--sub)}.hero{display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center}
 .verdict{font-size:20px;font-weight:700;margin:0 0 6px}.good{color:var(--good)}.warn{color:var(--warn)}.bad{color:var(--bad)}.muted{color:var(--muted)}
@@ -109,7 +110,7 @@ select{font:inherit;padding:6px 10px;border-radius:8px;border:1px solid var(--li
 @media (max-width:640px){.hero{grid-template-columns:1fr;justify-items:center;text-align:center}}
 @media print{body{background:#fff}.card{break-inside:avoid;border-color:#ddd}.btn{display:none}}
 </style></head><body><div class="wrap">
-<div class="card agency"><div><h2>${esc(agency)}</h2><small>${[s.agency_website, s.agency_email, s.agency_phone].filter(Boolean).map(esc).join(' · ')}</small></div>
+<div class="card agency"><div>${s.report_logo === '0' ? `<h2>${esc(agency)}</h2>` : `<a class="ag-logo" href="${esc(s.agency_website ? 'https://' + s.agency_website.replace(/^https?:\/\//, '') : '#')}" target="_blank" rel="noopener" aria-label="${esc(agency)}">${LOGO}</a>`}<small>${[s.report_logo === '0' ? '' : esc(agency), ...[s.agency_website, s.agency_email, s.agency_phone].filter(Boolean).map(esc)].filter(Boolean).join(' · ')}</small></div>
 <div><span class="sub" style="margin-right:12px">Fragen zu Ihrem Ergebnis?</span><a class="btn" href="${esc(cta)}">Jetzt Kontakt aufnehmen</a></div></div>
 
 <div class="card"><h1>${esc(a.business_name)}</h1><div class="sub">Online-Check vom ${date}${a.industry ? ' · ' + esc(a.industry) : ''}</div>
@@ -143,7 +144,7 @@ var s=document.createElement('script');s.src='https://unpkg.com/leaflet@1.9.4/di
 <\/script>`;
 
 export function renderWidget(s) {
-  const accent = esc(s.brand_color || '#2563eb');
+  const accent = esc(s.brand_color || '#0B4AA0');
   return `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kostenloser Website-Check</title><meta name="robots" content="noindex">
 <style>:root{--a:${accent}}*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#0f172a;background:transparent}
 .w{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:22px}h2{margin:0 0 4px;font-size:21px}p{margin:0 0 14px;color:#64748b}

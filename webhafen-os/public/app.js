@@ -731,7 +731,7 @@ async function leadFinder(v) {
     if (!map) {
       map = L.map('lmap').setView([data.center.lat, data.center.lng], 12);
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(map);
-      L.circle([data.center.lat, data.center.lng], { radius: (data.q.radius_km || 5) * 1000, color: '#2563eb', weight: 1, fillOpacity: 0.04 }).addTo(map);
+      L.circle([data.center.lat, data.center.lng], { radius: (data.q.radius_km || 5) * 1000, color: '#0B4AA0', weight: 1, fillOpacity: 0.04 }).addTo(map);
     }
     markers?.remove(); markers = L.layerGroup().addTo(map);
     const pts = vis.filter((p) => p.lat != null).map((p) => {
@@ -857,7 +857,7 @@ async function widgetView(v) {
   $('#cp').onclick = () => copy(snippet);
 }
 
-const SRC_COL = { manuell: '#64748b', 'lead-finder': '#2563eb', agent: '#7c3aed', widget: '#16a34a' };
+const SRC_COL = { manuell: '#64748b', 'lead-finder': '#0B4AA0', agent: '#7c3aed', widget: '#16a34a' };
 function donut(parts) {
   const total = parts.reduce((s, p) => s + p.n, 0); let acc = 0; const C = 2 * Math.PI * 40;
   return `<svg viewBox="0 0 100 100" width="170" height="170"><circle cx="50" cy="50" r="40" fill="none" stroke="var(--soft)" stroke-width="14"/>
@@ -921,7 +921,8 @@ VIEWS.einstellungen = async (v) => {
   v.innerHTML = `<div class="grid g2"><form class="card form" id="sf"><h3>Agentur (erscheint in den Berichten)</h3>
     ${field('Agenturname', 'agency_name', SETTINGS.agency_name, 'text', 'placeholder="Webhafen – Webdesign & Entwicklung"')}${field('Website', 'agency_website', SETTINGS.agency_website, 'text', 'placeholder="web-hafen.de"')}
     ${field('E-Mail', 'agency_email', SETTINGS.agency_email, 'email')}${field('Telefon', 'agency_phone', SETTINGS.agency_phone, 'tel')}
-    <label>Markenfarbe<input type="color" name="brand_color" value="${e(SETTINGS.brand_color || '#2563eb')}" style="height:40px"></label>${field('Link für „Kontakt aufnehmen“', 'cta_url', SETTINGS.cta_url, 'url', 'placeholder="https://web-hafen.de/kontakt (sonst mailto)"')}
+    <label>Markenfarbe<input type="color" name="brand_color" value="${e(SETTINGS.brand_color || '#0B4AA0')}" style="height:40px"></label>
+    <label class="check full"><input type="checkbox" id="rlogo" ${SETTINGS.report_logo === '0' ? '' : 'checked'}> Webhafen-Logo in Berichten anzeigen</label>${field('Link für „Kontakt aufnehmen“', 'cta_url', SETTINGS.cta_url, 'url', 'placeholder="https://web-hafen.de/kontakt (sonst mailto)"')}
     ${field('Link zur Datenschutzerklärung (Widget)', 'privacy_url', SETTINGS.privacy_url, 'url', 'placeholder="https://web-hafen.de/datenschutz"')}${field('Standard-Standort für die Lead-Suche', 'default_location', SETTINGS.default_location, 'text', 'placeholder="Haren (Ems)"')}
     <h3>System</h3><div class="full">${field('Öffentliche Adresse dieser App', 'public_url', SETTINGS.public_url, 'url', `placeholder="${location.origin}"`)}<p class="small sub">Wird für Affiliate-, Kurz- und Berichtslinks verwendet.</p></div>
     <div class="actions"><button class="btn primary">Speichern</button></div></form>
@@ -934,7 +935,7 @@ Content-Type: application/json
   "customer_name": "Max Muster", "customer_email": "max@example.de" }</div>
     <h3 class="mt">Optionale API-Schlüssel</h3><p class="small">${SETTINGS.places_key ? '✅' : '⬜'} <code>GOOGLE_PLACES_API_KEY</code> – Google-Profil & Bewertungen im Website-Check<br>${SETTINGS.pagespeed_key ? '✅' : '⬜'} <code>PAGESPEED_API_KEY</code> – eigenes Kontingent für PageSpeed-Messungen<br>${SETTINGS.ai_key ? '✅' : '⬜'} <code>ANTHROPIC_API_KEY</code> – Claude schreibt individuelle Anschreiben-Entwürfe</p>
     <p class="small sub">Werden als Umgebungsvariablen beim Start gesetzt (siehe README).</p></div></div>`;
-  $('#sf').onsubmit = safe(async (ev) => { ev.preventDefault(); SETTINGS = { ...SETTINGS, ...(await PUT('/api/settings', formData(ev.target))) }; document.documentElement.style.setProperty('--accent', SETTINGS.brand_color); toast('Gespeichert'); });
+  $('#sf').onsubmit = safe(async (ev) => { ev.preventDefault(); const sd = formData(ev.target); sd.report_logo = $('#rlogo').checked ? '1' : '0'; SETTINGS = { ...SETTINGS, ...(await PUT('/api/settings', sd)) }; document.documentElement.style.setProperty('--accent', SETTINGS.brand_color); toast('Gespeichert'); });
   $('#gen').onclick = safe(async () => { if (SETTINGS.aff_api_key && !confirm('Alter Schlüssel wird ungültig. Fortfahren?')) return;
     const k = [...crypto.getRandomValues(new Uint8Array(18))].map((b) => b.toString(16).padStart(2, '0')).join(''); await PUT('/api/settings', { aff_api_key: k }); render(); });
 };
