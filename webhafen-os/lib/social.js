@@ -118,7 +118,7 @@ export function parseFeed(xml) {
 
 export async function checkFeed(db, feed) {
   try {
-    const r = await fetch(feed.url, { signal: AbortSignal.timeout(15000), headers: { 'user-agent': 'WebhafenCockpit/1.0 (RSS)' } });
+    const r = await fetch(feed.url, { signal: AbortSignal.timeout(15000), headers: { 'user-agent': 'WebhafenOS/1.0 (RSS)' } });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const items = parseFeed(await r.text());
     const seen = new Set(parseJSON(feed.seen, []));

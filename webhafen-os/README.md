@@ -1,4 +1,6 @@
-# Webhafen Cockpit
+# Webhafen OS
+
+*Das Betriebssystem für dein Business.*
 
 Eigene Marketing- und Vertriebs-Software für Webhafen: CRM, Lead-Pipelines mit Prognose,
 Social Planner, Affiliate-Manager, Trigger-Links und automatische Website-Checks für die
@@ -6,12 +8,12 @@ Kundenakquise – in **einer** App, ohne monatliche Lizenzkosten.
 
 - **Keine Abhängigkeiten**: nur Node.js ≥ 22.13 (die Datenbank SQLite ist eingebaut)
 - **Kein Build-Schritt**: `npm start` und fertig
-- Alle Daten liegen in einer Datei: `data/cockpit.db` (zum Sichern einfach kopieren)
+- Alle Daten liegen in einer Datei: `data/webhafen-os.db` (zum Sichern einfach kopieren)
 
 ## Starten
 
 ```bash
-cd webhafen-cockpit
+cd webhafen-os
 ADMIN_PASSWORD='ein-langes-passwort' npm start
 # → http://localhost:3000
 ```
@@ -22,7 +24,7 @@ Ohne `ADMIN_PASSWORD` ist die App **ohne Login** erreichbar – nur lokal so bet
 |---|---|
 | `ADMIN_PASSWORD` | Passwort für den Login (Pflicht auf einem Server) |
 | `PORT` | Port, Standard `3000` |
-| `DB_FILE` | Pfad zur Datenbank, Standard `data/cockpit.db` |
+| `DB_FILE` | Pfad zur Datenbank, Standard `data/webhafen-os.db` |
 | `TZ` | Zeitzone für geplante Beiträge, Standard `Europe/Berlin` |
 | `HTTPS` | `1` setzen, wenn die App hinter HTTPS läuft (sichere Cookies) |
 | `GOOGLE_PLACES_API_KEY` | optional: Google-Unternehmensprofil & Bewertungen im Website-Check |
@@ -61,7 +63,7 @@ Kontakte anlegen, durchsuchen, taggen, per CSV importieren.
 
 ### 📊 Prognose
 - Maximale potenzielle, erwartete (Wert × Wahrscheinlichkeit) und gewonnene Einnahmen
-- **Gefährdete Leads**: Das Cockpit merkt sich, wenn ein Abschlussdatum nach hinten verschoben
+- **Gefährdete Leads**: Webhafen OS merkt sich, wenn ein Abschlussdatum nach hinten verschoben
   wird → hohes Risiko (2× oder 14+ Tage), mittleres (7+ Tage), geringes
 - Datenqualität: fehlendes Abschlussdatum, fehlender Wert, überfällige Leads
 - Gruppierung nach Status oder Phase, Zeitachse nach Abschlussmonat
@@ -76,7 +78,7 @@ Kontakte anlegen, durchsuchen, taggen, per CSV importieren.
 
 **Wie wird veröffentlicht?** Facebook, Instagram, LinkedIn, TikTok & YouTube lassen automatisches
 Posten nur über Entwickler-Apps zu, die die Plattform erst prüfen und freischalten muss.
-Das Cockpit übergibt deshalb jeden fälligen Beitrag an einen **Webhook** – am einfachsten ein
+Webhafen OS übergibt deshalb jeden fälligen Beitrag an einen **Webhook** – am einfachsten ein
 Szenario in [Make](https://make.com), Zapier oder n8n, das dort mit dem jeweiligen Konto
 verbunden ist und postet:
 
@@ -129,7 +131,7 @@ Kurzlinks `https://deine-app/l/slug` mit Klickzählung – für Flyer, QR-Codes,
   Schutz: Honeypot, max. 3 Checks pro Besucher/Stunde, 50 pro Tag.
 - **Analytics**: erstellte Berichte (nach Quelle), Kontakte, neue Interessenten pro Woche, Berichtsaufrufe,
   meistgesehene Berichte, Widget-Einreichungen. Aufrufe zählen nur, wenn der geteilte Link geöffnet wird
-  (nicht die Vorschau im Cockpit).
+  (nicht die Vorschau in Webhafen OS).
 
 ### 🔍 Website-Check (Bericht)
 Firmenname + Website eingeben → nach wenigen Sekunden ein Bericht mit über 30 Prüfungen:
@@ -164,9 +166,9 @@ Render, Railway oder Fly.io) – ein reines Webspace-Paket reicht **nicht**, wei
 Hintergrund laufen muss. Beispiel mit systemd:
 
 ```ini
-# /etc/systemd/system/cockpit.service
+# /etc/systemd/system/webhafen-os.service
 [Service]
-WorkingDirectory=/opt/webhafen-cockpit
+WorkingDirectory=/opt/webhafen-os
 Environment=ADMIN_PASSWORD=… HTTPS=1 PORT=3000
 ExecStart=/usr/bin/npm start
 Restart=always
@@ -174,7 +176,7 @@ Restart=always
 WantedBy=multi-user.target
 ```
 
-Davor einen Reverse-Proxy mit HTTPS (z. B. Caddy: `cockpit.web-hafen.de { reverse_proxy localhost:3000 }`)
+Davor einen Reverse-Proxy mit HTTPS (z. B. Caddy: `os.web-hafen.de { reverse_proxy localhost:3000 }`)
 und unter Einstellungen die „Öffentliche Adresse“ eintragen.
 
 ## Was (noch) fehlt

@@ -150,8 +150,8 @@ async function loadPipes() {
   const saved = Number(localStorageGet('pipe'));
   CUR_PIPE = PIPES.find((p) => p.id === saved) || PIPES[0] || null;
 }
-function localStorageGet(k) { try { return localStorage.getItem('wc_' + k); } catch { return null; } }
-function localStorageSet(k, v) { try { localStorage.setItem('wc_' + k, v); } catch {} }
+function localStorageGet(k) { try { return localStorage.getItem('wos_' + k); } catch { return null; } }
+function localStorageSet(k, v) { try { localStorage.setItem('wos_' + k, v); } catch {} }
 const pipeSelect = () => `<select id="pipeSel" style="width:auto;min-width:220px">${PIPES.map((p) => `<option value="${p.id}" ${p.id === CUR_PIPE?.id ? 'selected' : ''}>${e(p.name)}</option>`).join('')}</select>`;
 const bindPipeSelect = () => { const s = $('#pipeSel'); if (s) s.onchange = () => { localStorageSet('pipe', s.value); render(); }; };
 
@@ -400,7 +400,7 @@ function socialAccounts(v) {
     <td class="small">${a.platform === 'bluesky' && a.handle && a.has_secret ? '✅ Direkt per Bluesky-API' : a.webhook_url ? '✅ Über Webhook' : '<span class="warn">⚠ Manuell (kein Webhook)</span>'}</td><td class="num"><button class="btn sm" data-acc="${a.id}">Bearbeiten</button></td></tr>`).join('')}</table></div>` : ''}
   <h3 class="sub small mb">GROSSE NETZWERKE</h3><div class="platforms">${big.map(tile).join('')}</div>
   <h3 class="sub small mb mt">AUCH VERFÜGBAR</h3><div class="platforms">${more.map(tile).join('')}</div>
-  <div class="card mt"><h3>So funktioniert die Veröffentlichung</h3><p class="sub">Facebook, Instagram, LinkedIn, TikTok & Co. erlauben automatisches Posten nur über freigeschaltete Entwickler-Apps. Damit du sofort loslegen kannst, übergibt das Cockpit jeden fälligen Beitrag an einen <b>Webhook</b> – z. B. ein Szenario in <b>Make</b>, <b>Zapier</b> oder <b>n8n</b>, das dort mit deinem Konto verbunden ist und postet. <b>Bluesky</b> wird direkt angebunden (Handle + App-Passwort). Ohne Webhook erinnert dich das Cockpit, den Beitrag manuell zu posten.</p>
+  <div class="card mt"><h3>So funktioniert die Veröffentlichung</h3><p class="sub">Facebook, Instagram, LinkedIn, TikTok & Co. erlauben automatisches Posten nur über freigeschaltete Entwickler-Apps. Damit du sofort loslegen kannst, übergibt Webhafen OS jeden fälligen Beitrag an einen <b>Webhook</b> – z. B. ein Szenario in <b>Make</b>, <b>Zapier</b> oder <b>n8n</b>, das dort mit deinem Konto verbunden ist und postet. <b>Bluesky</b> wird direkt angebunden (Handle + App-Passwort). Ohne Webhook erinnert dich Webhafen OS, den Beitrag manuell zu posten.</p>
   <div class="code">POST &lt;deine Webhook-URL&gt;
 { "platform": "instagram", "account": "Webhafen", "post_id": 12, "content": "…", "media_url": "https://…", "link": "https://…", "sent_at": "…" }</div></div>`;
   $$('[data-plat]').forEach((b) => (b.onclick = () => accountModal({ platform: b.dataset.plat })));
@@ -419,7 +419,7 @@ function accountModal(a) {
   if (a.id) {
     $('#del').onclick = safe(async () => { if (confirm('Konto trennen?')) { await DEL('/api/social/accounts/' + a.id); closeModal(); render(); } });
     $('#test').onclick = safe(async () => {
-      const p = await POST('/api/social/posts', { content: 'Testbeitrag aus dem Webhafen Cockpit ✅', account_ids: [a.id], status: 'draft' });
+      const p = await POST('/api/social/posts', { content: 'Testbeitrag aus Webhafen OS ✅', account_ids: [a.id], status: 'draft' });
       const r = await POST(`/api/social/posts/${p.id}/publish`); toast(r.errors.length ? r.errors.join(', ') : 'Test erfolgreich: ' + r.status, !!r.errors.length);
     });
   }

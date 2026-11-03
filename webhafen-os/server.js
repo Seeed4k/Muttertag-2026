@@ -1,6 +1,7 @@
 process.env.TZ ||= 'Europe/Berlin';
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { existsSync, renameSync } from 'node:fs';
 import { extname, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -15,7 +16,12 @@ import { createAudit, auditProspect, prospectToCrm, outreachForProspect, upsertP
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
 const PASSWORD = process.env.ADMIN_PASSWORD || '';
-export const db = openDb(process.env.DB_FILE || join(ROOT, 'data', 'cockpit.db'));
+const DEFAULT_DB = join(ROOT, 'data', 'webhafen-os.db');
+// Datenbank aus der Zeit vor der Umbenennung übernehmen (data/cockpit.db)
+if (!process.env.DB_FILE && !existsSync(DEFAULT_DB) && existsSync(join(ROOT, 'data', 'cockpit.db'))) {
+  for (const ext of ['', '-wal', '-shm']) if (existsSync(join(ROOT, 'data', 'cockpit.db' + ext))) renameSync(join(ROOT, 'data', 'cockpit.db' + ext), DEFAULT_DB + ext);
+}
+export const db = openDb(process.env.DB_FILE || DEFAULT_DB);
 const sessions = new Map();
 
 // ---------- Hilfsfunktionen ----------
@@ -505,7 +511,7 @@ export async function handle(req, res) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   http.createServer(handle).listen(PORT, () => {
-    console.log(`Webhafen Cockpit läuft auf http://localhost:${PORT}`);
+    console.log(`Webhafen OS läuft auf http://localhost:${PORT}`);
     if (!PASSWORD) console.warn('⚠  ADMIN_PASSWORD ist nicht gesetzt – die App ist ohne Login erreichbar. Nur lokal so betreiben!');
   });
   let busy = false;

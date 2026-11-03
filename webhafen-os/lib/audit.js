@@ -1,5 +1,5 @@
 // Website-/Marketing-Audit für Interessenten (Prospecting)
-const UA = 'Mozilla/5.0 (compatible; WebhafenAudit/1.0; +https://web-hafen.de)';
+const UA = 'Mozilla/5.0 (compatible; WebhafenOS/1.0; +https://web-hafen.de)';
 
 const has = (html, ...res) => res.some((r) => r.test(html));
 
