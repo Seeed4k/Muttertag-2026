@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Webhafen Cockpit</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="login" class="login" hidden>
+  <form class="card" id="loginForm">
+    <div class="logo big">⚓</div>
+    <h1>Webhafen Cockpit</h1>
+    <label>Passwort<input type="password" name="password" autofocus required></label>
+    <button class="btn primary">Anmelden</button>
+    <p class="err" id="loginErr"></p>
+  </form>
+</div>
+<div id="app" class="shell" hidden>
+  <aside class="side">
+    <div class="brand"><span class="logo">⚓</span><span>Cockpit</span></div>
+    <nav id="nav">
+      <a href="#/dashboard" data-s="dashboard"><span>📊</span>Übersicht</a>
+      <a href="#/kontakte" data-s="kontakte"><span>👥</span>Kontakte</a>
+      <a href="#/leads" data-s="leads"><span>🎯</span>Leads</a>
+      <a href="#/social" data-s="social"><span>📣</span>Social Planner</a>
+      <a href="#/affiliate" data-s="affiliate"><span>🤝</span>Affiliate</a>
+      <a href="#/links" data-s="links"><span>🔗</span>Trigger-Links</a>
+      <a href="#/audits" data-s="audits"><span>🔍</span>Website-Check</a>
+      <a href="#/einstellungen" data-s="einstellungen"><span>⚙️</span>Einstellungen</a>
+    </nav>
+    <button class="logout" id="logout" hidden>Abmelden</button>
+  </aside>
+  <main>
+    <header class="top"><button class="menu" id="menu" aria-label="Menü">☰</button><h1 id="title"></h1><nav class="tabs" id="tabs"></nav></header>
+    <div id="view" class="view"></div>
+  </main>
+</div>
+<div id="modal" class="modal" hidden><div class="modal-box"><div class="modal-head"><h2 id="modalTitle"></h2><button class="x" data-close aria-label="Schließen">✕</button></div><div id="modalBody"></div></div></div>
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
