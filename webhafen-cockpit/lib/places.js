@@ -114,15 +114,29 @@ export async function heatmapScan({ keyword, lat, lng, placeId, size = 3, radius
   return { keyword, size, radius_km: radiusKm, center: { lat, lng }, points: out, avg_rank: avg, score, scanned_at: new Date().toISOString() };
 }
 
-// Wie lohnend ist der Interessent für eine Webagentur? 0–100, höher = mehr Bedarf
-export function leadPotential(p) {
+// Wie lohnend ist der Interessent für eine Webagentur? 0–100, höher = mehr Bedarf = besserer Lead.
+// `site` ist das Ergebnis der Schnellprüfung (quickSiteCheck), sofern vorhanden.
+export function leadPotential(p, site = null) {
   let s = 0; const why = [];
-  if (!p.website) { s += 40; why.push('keine Website'); }
-  if (p.rating == null) { s += 10; why.push('keine Bewertungen'); }
-  else if (p.rating < 4.2) { s += 15; why.push(`nur ${String(p.rating).replace('.', ',')} Sterne`); }
-  if ((p.review_count || 0) < 20) { s += 15; why.push(`wenige Bewertungen (${p.review_count || 0})`); }
-  if ((p.photos || 0) < 5) { s += 10; why.push('kaum Fotos'); }
-  if (!p.has_hours) { s += 10; why.push('keine Öffnungszeiten'); }
-  if (!p.phone) { s += 10; why.push('keine Telefonnummer'); }
-  return { score: Math.min(100, s), why };
+  const add = (n, reason) => { s += n; why.push(reason); };
+  if (!p.website) add(40, 'keine Website');
+  else if (site) {
+    if (!site.reachable) add(30, 'Website nicht erreichbar');
+    else {
+      if (!site.https) add(10, 'keine Verschlüsselung (https)');
+      if (!site.viewport) add(15, 'nicht für Smartphones optimiert');
+      if (site.builder) add(10, `Homepage-Baukasten (${site.cms.find((c) => c !== 'WordPress') || site.cms[0]})`);
+      if (site.ms > 3000) add(5, `langsam (${(site.ms / 1000).toFixed(1).replace('.', ',')} s)`);
+      if (!site.analytics) add(5, 'kein Tracking');
+      if (!site.chat?.length) add(3, 'kein Chat/WhatsApp');
+    }
+  }
+  if (p.rating == null) add(10, 'keine Bewertungen');
+  else if (p.rating < 4.2) add(15, `nur ${String(p.rating).replace('.', ',')} Sterne`);
+  if ((p.review_count || 0) < 20) add(15, `wenige Bewertungen (${p.review_count || 0})`);
+  if ((p.photos || 0) < 5) add(10, 'kaum Fotos');
+  if (!p.has_hours) add(7, 'keine Öffnungszeiten');
+  if (!p.phone) add(10, 'keine Telefonnummer');
+  const score = Math.min(100, s);
+  return { score, level: score >= 60 ? 'hoch' : score >= 35 ? 'mittel' : 'niedrig', why, checked: !p.website || !!site };
 }

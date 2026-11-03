@@ -10,7 +10,7 @@ import { forecast } from './lib/forecast.js';
 import { publishPost, runScheduler, checkFeed, PLATFORMS } from './lib/social.js';
 import { renderReport, renderWidget } from './lib/report.js';
 import { searchArea, leadPotential, heatmapScan, hasPlacesKey } from './lib/places.js';
-import { createAudit, auditProspect, prospectToCrm, outreachForProspect, upsertProspect, runAgent, runDueAgents } from './lib/prospects.js';
+import { createAudit, auditProspect, prospectToCrm, outreachForProspect, upsertProspect, runAgent, runDueAgents, checkSites, cachedSite } from './lib/prospects.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
@@ -368,7 +368,13 @@ route('POST', '/api/prospects/search', async ({ body }) => {
   need(body.query, 'Suchbegriff fehlt'); need(body.location, 'Standort fehlt');
   const r = await searchArea({ query: body.query, location: body.location, radiusKm: Number(body.radius_km) || 5 });
   const known = new Map(all('SELECT id, place_id, status FROM prospects WHERE place_id IS NOT NULL').map((p) => [p.place_id, p]));
-  return { center: r.center, results: r.results.map((p) => ({ ...p, potential: leadPotential(p), prospect: known.get(p.place_id) || null })) };
+  return { center: r.center, results: r.results.map((p) => { const site = cachedSite(db, p.website); return { ...p, site, potential: leadPotential(p, site), prospect: known.get(p.place_id) || null }; }) };
+});
+// Websites der Treffer schnell prüfen (Baukasten, Mobilfähigkeit, https …) und Potenzial neu berechnen
+route('POST', '/api/prospects/quick-check', async ({ body }) => {
+  const items = (body.items || []).slice(0, 20);
+  const sites = await checkSites(db, items.map((p) => p.website));
+  return items.map((p) => ({ place_id: p.place_id, site: sites[p.website] || null, potential: leadPotential(p, sites[p.website]) }));
 });
 route('POST', '/api/prospects', async ({ body }) => {
   // Einzeln oder mehrere Treffer aus dem Lead-Finder übernehmen; optional sofort prüfen

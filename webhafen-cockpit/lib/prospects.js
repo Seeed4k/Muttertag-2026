@@ -1,5 +1,5 @@
 // Interessenten (Prospecting): Audits erzeugen, ins CRM übernehmen, Prospect-Agent
-import { runAudit } from './audit.js';
+import { runAudit, quickSiteCheck } from './audit.js';
 import { searchArea, leadPotential } from './places.js';
 import { token, localStamp, parseJSON } from './util.js';
 import { draftOutreach } from './outreach.js';
@@ -7,15 +7,38 @@ import { getSettings } from './db.js';
 
 const one = (db, sql, ...a) => db.prepare(sql).get(...a);
 
+// ---------- Schnellprüfung der Websites (mit 7-Tage-Zwischenspeicher) ----------
+export function cachedSite(db, url) {
+  if (!url) return null;
+  const r = one(db, `SELECT data FROM site_checks WHERE url = ? AND checked_at >= datetime('now','localtime','-7 days')`, url);
+  return r ? parseJSON(r.data, null) : null;
+}
+export async function checkSites(db, urls, { concurrency = 4 } = {}) {
+  const out = {}; const todo = [];
+  for (const u of new Set(urls.filter(Boolean))) { const c = cachedSite(db, u); if (c) out[u] = c; else todo.push(u); }
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(concurrency, todo.length) }, async () => {
+    while (i < todo.length) {
+      const u = todo[i++];
+      out[u] = await quickSiteCheck(u);
+      db.prepare(`INSERT INTO site_checks (url, data, checked_at) VALUES (?, ?, datetime('now','localtime'))
+        ON CONFLICT(url) DO UPDATE SET data = excluded.data, checked_at = excluded.checked_at`).run(u, JSON.stringify(out[u]));
+    }
+  }));
+  return out;
+}
+
 export function upsertProspect(db, p, { source = 'manuell', agent_id = null } = {}) {
   if (p.place_id) {
     const ex = one(db, 'SELECT id FROM prospects WHERE place_id = ?', p.place_id);
     if (ex) return { id: ex.id, created: false };
   }
-  const pot = leadPotential(p);
-  const id = db.prepare(`INSERT INTO prospects (place_id, name, address, lat, lng, phone, website, category, rating, review_count, photos, maps_url, potential, potential_why, source, agent_id)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(p.place_id || null, p.name, p.address || '', p.lat ?? null, p.lng ?? null, p.phone || '', p.website || '',
-    p.category || '', p.rating ?? null, p.review_count || 0, p.photos || 0, p.maps_url || '', p.place_id ? pot.score : null, JSON.stringify(p.place_id ? pot.why : []), source, agent_id).lastInsertRowid;
+  const site = cachedSite(db, p.website);
+  const pot = leadPotential(p, site);
+  const id = db.prepare(`INSERT INTO prospects (place_id, name, address, lat, lng, phone, website, category, rating, review_count, photos, maps_url, potential, potential_why, source, agent_id, site, has_hours)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(p.place_id || null, p.name, p.address || '', p.lat ?? null, p.lng ?? null, p.phone || '', p.website || '',
+    p.category || '', p.rating ?? null, p.review_count || 0, p.photos || 0, p.maps_url || '', p.place_id ? pot.score : null, JSON.stringify(p.place_id ? pot.why : []), source, agent_id,
+    site ? JSON.stringify(site) : null, p.has_hours ? 1 : 0).lastInsertRowid;
   return { id, created: true };
 }
 
@@ -86,9 +109,11 @@ export async function runAgent(db, agent, env = process.env) {
   try {
     const { results } = await searchArea({ query: agent.query, location: agent.location, radiusKm: agent.radius_km });
     out.found = results.length;
-    const candidates = results
-      .filter((p) => !agent.only_no_website || !p.website)
-      .map((p) => ({ ...p, pot: leadPotential(p).score }))
+    const pre = results.filter((p) => !agent.only_no_website || !p.website)
+      .filter((p) => !p.place_id || !one(db, 'SELECT id FROM prospects WHERE place_id = ?', p.place_id));
+    const sites = await checkSites(db, pre.slice(0, 40).map((p) => p.website));
+    const candidates = pre
+      .map((p) => ({ ...p, pot: leadPotential(p, sites[p.website]).score }))
       .filter((p) => p.pot >= (agent.min_potential || 0))
       .sort((a, b) => b.pot - a.pot);
     for (const p of candidates) {

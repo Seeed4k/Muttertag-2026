@@ -3,14 +3,14 @@ const UA = 'Mozilla/5.0 (compatible; WebhafenAudit/1.0; +https://web-hafen.de)';
 
 const has = (html, ...res) => res.some((r) => r.test(html));
 
-const CHAT_WIDGETS = [
+export const CHAT_WIDGETS = [
   ['Tawk.to', /embed\.tawk\.to/i], ['Crisp', /client\.crisp\.chat/i], ['Intercom', /widget\.intercom\.io|intercomSettings/i],
   ['Tidio', /code\.tidio\.co/i], ['HubSpot Chat', /js\.hs-scripts\.com|hubspot.*conversations/i], ['Zendesk', /static\.zdassets\.com/i],
   ['LiveChat', /cdn\.livechatinc\.com/i], ['Userlike', /userlike/i], ['Smartsupp', /smartsuppchat/i], ['Drift', /js\.driftt\.com/i],
   ['Chatwoot', /chatwoot/i], ['LeadConnector', /leadconnectorhq|msgsndr/i], ['WhatsApp-Button', /wa\.me\/|api\.whatsapp\.com\/send/i],
   ['Facebook Messenger', /connect\.facebook\.net\/[^"']*\/sdk\/xfbml\.customerchat/i], ['Brevo Chat', /conversations-widget\.brevo\.com|sibautomation/i],
 ];
-const CMS = [
+export const CMS = [
   ['WordPress', /wp-content|wp-includes/i], ['Wix', /static\.wixstatic\.com|wix\.com/i], ['Jimdo', /jimdo/i],
   ['Shopify', /cdn\.shopify\.com/i], ['Squarespace', /squarespace/i], ['Webflow', /webflow/i], ['TYPO3', /typo3/i],
   ['Joomla', /\/media\/jui\/|joomla/i], ['IONOS MyWebsite', /ionos|mywebsite-editor|website-editor\.net/i], ['Contao', /contao/i],
@@ -18,6 +18,32 @@ const CMS = [
   ['LeadConnector', /leadconnectorhq|msgsndr/i], ['Strato Sitebuilder', /strato/i],
 ];
 const CONSENT = [/cookiebot/i, /usercentrics/i, /borlabs/i, /complianz/i, /cookieyes/i, /onetrust/i, /consentmanager/i, /klaro/i, /ccm19/i, /real-cookie-banner/i, /cookie-?consent/i, /cookie-?banner/i];
+
+// Homepage-Baukästen: meist langsam, schlecht auffindbar – ein gutes Verkaufsargument
+const BUILDERS = ['Wix', 'Jimdo', 'IONOS MyWebsite', 'Strato Sitebuilder', 'Squarespace'];
+
+// Schnellprüfung für die Ergebnisliste im Lead-Finder (eine Anfrage, max. 8 s)
+export async function quickSiteCheck(rawUrl) {
+  let url;
+  try { url = normalizeUrl(rawUrl); } catch (e) { return { reachable: false, error: e.message }; }
+  try {
+    const { r, body, ms } = await fetchTimed(url, { signal: AbortSignal.timeout(8000) });
+    const html = body.slice(0, 600000);
+    const final = r.url || url;
+    const cms = CMS.filter(([, re]) => re.test(html)).map(([n]) => n);
+    return {
+      reachable: r.ok, status: r.status, final_url: final, https: final.startsWith('https://'), ms,
+      cms, builder: cms.some((c) => BUILDERS.includes(c)),
+      viewport: /<meta[^>]+name=["']viewport["']/i.test(html),
+      analytics: /googletagmanager\.com\/(gtag|gtm)|google-analytics\.com|GTM-[A-Z0-9]{4,}/i.test(html),
+      pixel: /fbevents\.js|fbq\(['"]init/i.test(html),
+      chat: CHAT_WIDGETS.filter(([, re]) => re.test(html)).map(([n]) => n),
+      title: (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1]?.trim().slice(0, 120) || '',
+    };
+  } catch (e) {
+    return { reachable: false, error: e.name === 'TimeoutError' ? 'Zeitüberschreitung' : e.cause?.code || e.message };
+  }
+}
 
 async function fetchTimed(url, opts = {}) {
   const t0 = performance.now();

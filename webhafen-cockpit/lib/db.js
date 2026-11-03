@@ -99,6 +99,7 @@ export function openDb(file) {
   CREATE TABLE IF NOT EXISTS report_views (
     id INTEGER PRIMARY KEY, audit_id INTEGER REFERENCES audits(id) ON DELETE CASCADE, referer TEXT,
     created_at TEXT DEFAULT (datetime('now','localtime')));
+  CREATE TABLE IF NOT EXISTS site_checks (url TEXT PRIMARY KEY, data TEXT, checked_at TEXT DEFAULT (datetime('now','localtime')));
   CREATE TABLE IF NOT EXISTS widget_submissions (
     id INTEGER PRIMARY KEY, name TEXT, email TEXT, phone TEXT, business_name TEXT, url TEXT, audit_id INTEGER, prospect_id INTEGER,
     error TEXT, created_at TEXT DEFAULT (datetime('now','localtime')));
@@ -106,6 +107,8 @@ export function openDb(file) {
   const addColumn = (table, col, def) => {
     if (!db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
   };
+  addColumn('prospects', 'site', 'TEXT');
+  addColumn('prospects', 'has_hours', 'INTEGER DEFAULT 0');
   addColumn('audits', 'prospect_id', 'INTEGER');
   addColumn('audits', 'place_id', "TEXT DEFAULT ''");
   addColumn('audits', 'source', "TEXT DEFAULT 'manuell'");

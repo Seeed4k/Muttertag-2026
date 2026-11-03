@@ -139,3 +139,26 @@ test('Analytics zählt Berichte, Kontakte und Aufrufe', async () => {
   assert.equal(a.months.length, 6);
   assert.ok(a.widget.length >= 3);
 });
+
+test('Lead-Bewertung berücksichtigt die Schnellprüfung der Website', async () => {
+  const { leadPotential } = await import('../lib/places.js');
+  const base = { website: 'https://x.de', rating: 4.8, review_count: 50, photos: 10, has_hours: true, phone: '1' };
+  const good = leadPotential(base, { reachable: true, https: true, viewport: true, builder: false, ms: 500, analytics: true, chat: ['Tawk.to'], cms: ['WordPress'] });
+  assert.deepEqual([good.score, good.level], [0, 'niedrig']);
+  const bad = leadPotential(base, { reachable: true, https: false, viewport: false, builder: true, ms: 4000, analytics: false, chat: [], cms: ['Jimdo'] });
+  assert.equal(bad.level, 'mittel');
+  assert.ok(bad.why.includes('Homepage-Baukasten (Jimdo)'));
+  assert.equal(leadPotential({ ...base, website: '' }).checked, true);
+  assert.equal(leadPotential(base).checked, false, 'ohne Prüfung noch vorläufig');
+  assert.equal(leadPotential({ website: '', rating: null, review_count: 0, photos: 0 }).level, 'hoch');
+});
+
+test('Schnellprüfung liefert Ergebnis und nutzt den Zwischenspeicher', async () => {
+  const items = [{ place_id: 'q1', name: 'X', website: 'https://gibt-es-nicht.invalid', rating: 4.9, review_count: 40, photos: 10, has_hours: true, phone: '1' }];
+  const [r] = (await api('POST', '/api/prospects/quick-check', { items })).body;
+  assert.equal(r.site.reachable, false);
+  assert.ok(r.potential.why.includes('Website nicht erreichbar'));
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM site_checks').get().n, 1);
+  const t0 = Date.now(); await api('POST', '/api/prospects/quick-check', { items });
+  assert.ok(Date.now() - t0 < 200, 'zweiter Aufruf aus dem Zwischenspeicher');
+});

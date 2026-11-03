@@ -607,7 +607,24 @@ VIEWS.links = async (v) => {
 const SRC = { manuell: 'Manuell', 'lead-finder': 'Lead-Finder', agent: 'Prospect-Agent', widget: 'Widget' };
 const PSTATUS = { neu: 'Neu', 'geprüft': 'Geprüft', 'im CRM': 'Im CRM', kontaktiert: 'Kontaktiert', ignoriert: 'Ignoriert' };
 const tone = (s) => (s == null ? '' : s >= 80 ? 'good' : s >= 50 ? 'warn' : 'bad');
-const potBadge = (p) => (p == null ? '<span class="sub">–</span>' : `<span class="badge ${p >= 60 ? 'lost' : p >= 30 ? 'manual' : 'won'}" title="Je höher, desto mehr Bedarf an Webdesign/Marketing">${p}</span>`);
+const LEVEL = { hoch: { t: 'Hoch', c: '#16a34a', b: 'won' }, mittel: { t: 'Mittel', c: '#d97706', b: 'manual' }, niedrig: { t: 'Niedrig', c: '#dc2626', b: 'lost' } };
+const levelOf = (s) => (s >= 60 ? 'hoch' : s >= 35 ? 'mittel' : 'niedrig');
+const potPill = (pot, loading) => (loading ? '<span class="spin" title="Website wird geprüft …"></span>'
+  : `<span class="pot ${LEVEL[pot.level].b}" title="${e(pot.why.join(', ') || 'gut aufgestellt')}"><b>${pot.score}%</b> ${LEVEL[pot.level].t}</span>`);
+const potBadge = (p, why) => (p == null ? '<span class="sub">–</span>' : potPill({ score: p, level: levelOf(p), why: J(why, []) }, false));
+// Online-Präsenz: Google-Profil + Website (mit erkanntem System)
+function presence(p, pending = true) {
+  const s = typeof p.site === 'string' ? J(p.site, null) : p.site;
+  const g = p.place_id ? `<span class="pres ok" title="Google-Unternehmensprofil vorhanden">G<i>✓</i></span>` : `<span class="pres" title="Google-Profil unbekannt">G</span>`;
+  if (!p.website) return g + '<span class="pres no" title="Keine Website">🌐<i>✕</i></span>';
+  if (!s) return g + (pending ? '<span class="spin sm" title="Website wird geprüft …"></span>' : '<span class="pres" title="Website noch nicht schnell geprüft">🌐</span>');
+  if (!s.reachable) return g + `<span class="pres no" title="Website nicht erreichbar: ${e(s.error || s.status)}">🌐<i>✕</i></span>`;
+  const issues = [!s.https && 'kein https', !s.viewport && 'nicht mobiloptimiert', s.builder && 'Baukasten', !s.analytics && 'kein Tracking'].filter(Boolean);
+  const sys = s.cms?.[0] || ''; const label = sys === 'WordPress' ? 'W' : sys ? sys.slice(0, 2) : '🌐';
+  return g + `<span class="pres ${issues.length > 1 ? 'warn' : 'ok'}" title="${e([sys || 'System unbekannt', ...issues].join(' · '))}">${e(label)}<i>${issues.length > 1 ? '!' : '✓'}</i></span>`;
+}
+const FINDER_COLS = [{ key: 'potential', label: 'Lead-Bewertung', sort: 'potential', num: true }, { key: 'presence', label: 'Online-Präsenz' }, { key: 'google', label: 'Google-Bewertung', sort: 'rating' },
+  { key: 'website', label: 'Website im Profil', sort: 'website' }, { key: 'distance', label: 'Entfernung', sort: 'distance', num: true }, { key: 'status', label: 'Status' }, { key: 'action', label: 'Aktion' }];
 const starTxt = (r, n) => (r == null ? '<span class="sub">keine</span>' : `<span style="color:#f59e0b">★</span> ${String(r).replace('.', ',')} <span class="sub small">(${n})</span>`);
 TABS.audits = [['', 'Interessenten'], ['finder', 'Lead-Finder'], ['agent', 'Prospect-Agent'], ['widget', 'Widget'], ['analytics', 'Analytics']];
 
@@ -635,10 +652,10 @@ VIEWS.audits = async (v, sub) => {
     <select id="pst" style="width:auto"><option value="">Status: alle</option>${Object.entries(PSTATUS).map(([k, t]) => `<option value="${e(k)}" ${k === f.status ? 'selected' : ''}>${t}</option>`).join('')}</select>
     <select id="psrc" style="width:auto"><option value="">Quelle: alle</option>${Object.entries(SRC).map(([k, t]) => `<option value="${k}" ${k === f.source ? 'selected' : ''}>${t}</option>`).join('')}</select>
     <span class="grow"></span><button class="btn" id="man">Manuell prüfen</button><a class="btn primary" href="#/audits/finder">+ Interessenten finden</a></div>
-  ${list.length ? `<div class="card tablewrap"><table><tr><th>Unternehmen</th><th class="num">Potenzial</th><th class="num">Website-Check</th><th>Google</th><th>Website</th><th>Quelle</th><th>Status</th><th class="num">Aufrufe</th><th></th></tr>
+  ${list.length ? `<div class="card tablewrap"><table><tr><th>Unternehmen</th><th class="num">Lead-Bewertung</th><th>Online-Präsenz</th><th class="num">Website-Check</th><th>Google</th><th>Quelle</th><th>Status</th><th class="num">Aufrufe</th><th></th></tr>
   ${list.map((p) => `<tr><td><b>${e(p.name)}</b><div class="small sub">${e(p.category ? p.category + ' · ' : '')}${e(p.address)}</div></td>
-    <td class="num">${potBadge(p.potential)}</td><td class="num">${p.audit_id ? `<a href="#/audits/${p.audit_id}" class="${tone(p.audit_score)}"><b>${p.audit_score}%</b></a>` : '<span class="sub">–</span>'}</td>
-    <td>${starTxt(p.rating, p.review_count)}</td><td>${p.website ? `<a href="${e(p.website)}" target="_blank" rel="noopener">Ja ↗</a>` : '<b class="bad">Nein</b>'}</td>
+    <td class="num">${potBadge(p.potential, p.potential_why)}</td><td>${presence(p, false)}</td><td class="num">${p.audit_id ? `<a href="#/audits/${p.audit_id}" class="${tone(p.audit_score)}"><b>${p.audit_score}%</b></a>` : '<span class="sub">–</span>'}</td>
+    <td>${starTxt(p.rating, p.review_count)}</td>
     <td class="small">${e(SRC[p.source] || p.source)}</td><td><select data-ps="${p.id}" style="width:auto;padding:3px 6px">${Object.entries(PSTATUS).map(([k, t]) => `<option value="${e(k)}" ${k === p.status ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
     <td class="num">${p.views || 0}</td>
     <td class="num" style="white-space:nowrap">${p.audit_id ? '' : `<button class="btn sm" data-chk="${p.id}">Prüfen</button> `}<button class="btn sm" data-crm="${p.id}" ${p.opportunity_id ? 'disabled title="Bereits im CRM"' : ''}>→ CRM</button> <button class="btn sm" data-mail="${p.id}">✉</button> <button class="btn sm danger" data-pdel="${p.id}">🗑</button></td></tr>`).join('')}</table></div>`
@@ -681,54 +698,114 @@ async function outreachModal(p) {
 async function leadFinder(v) {
   const last = J(sessionStorage.getItem('lf'), null);
   v.innerHTML = `<div class="card mb"><div class="row between mb"><h3>Lokale Leads finden, prüfen und ins CRM übernehmen</h3><a href="#" id="man">Unternehmen manuell hinzufügen</a></div>
-    <form id="lff" class="row" style="align-items:flex-end"><label class="grow">Suchbegriff / Branche<input name="query" required placeholder="z. B. Dachdecker, Zahnarzt, Fahrschule" value="${e(last?.q?.query || '')}"></label>
+    <form id="lff" class="row" style="align-items:flex-end"><label class="grow">Suchbegriff / Firmenname<input name="query" required placeholder="z. B. Zahnarzt, Rechtsanwalt, Dachdecker" value="${e(last?.q?.query || '')}"></label>
     <label class="grow">Standort<input name="location" required placeholder="z. B. Haren (Ems)" value="${e(last?.q?.location || SETTINGS.default_location || '')}"></label>
     <label>Radius<select name="radius_km" style="width:auto">${[1, 2, 5, 10, 20, 30, 50].map((k) => `<option value="${k}" ${k == (last?.q?.radius_km || 5) ? 'selected' : ''}>${k} km</option>`).join('')}</select></label>
     <button class="btn primary" id="sb" ${SETTINGS.places_key ? '' : 'disabled'}>Suchen</button></form>
     ${SETTINGS.places_key ? '' : '<p class="small warn mt">Für den Lead-Finder wird ein Google-Places-API-Schlüssel benötigt (<code>GOOGLE_PLACES_API_KEY</code>, siehe README).</p>'}</div>
-    <div id="lfr">${last ? '' : empty('📍', 'Entdecke qualifizierte Leads in deiner Umgebung', 'Echte Unternehmen aus Google Maps – mit Bewertung, Website-Status und Potenzial. Speichern, prüfen und direkt als Lead anlegen.')}</div>`;
+    <div id="lfr">${last ? '' : empty('📍', 'Entdecke qualifizierte Leads in deiner Umgebung', 'Echte Unternehmen aus Google Maps – keine Scraper oder Tabellen. Speichern, prüfen und direkt als Lead anlegen.', '<a href="#" class="btn" onclick="event.preventDefault();document.getElementById(\'man\').click()">Unternehmen manuell hinzufügen</a>')}</div>`;
   $('#man').onclick = (ev) => { ev.preventDefault(); manualAuditModal(); };
-  const show = (data) => {
-    const rows = data.results; const sel = new Set();
-    const filt = J(sessionStorage.getItem('lff'), {}) || {};
-    const vis = rows.filter((p) => (!filt.noweb || !p.website) && (!filt.lowrating || (p.rating ?? 0) < 4.5));
-    $('#lfr').innerHTML = `<div class="card mb" style="padding:0;overflow:hidden"><div id="lmap" style="height:380px"></div></div>
-      <div class="card tablewrap"><div class="row mb"><b>${vis.length} von ${rows.length} Unternehmen</b><label class="check"><input type="checkbox" id="fnw" ${filt.noweb ? 'checked' : ''}> nur ohne Website</label>
-      <label class="check"><input type="checkbox" id="flr" ${filt.lowrating ? 'checked' : ''}> Bewertung unter 4,5</label><span class="grow"></span>
-      <button class="btn" id="addSel" disabled>Ausgewählte hinzufügen</button><button class="btn primary" id="addChk" disabled>Hinzufügen & prüfen</button></div>
-      <table><tr><th><input type="checkbox" id="all"></th><th>Unternehmen</th><th class="num">Potenzial</th><th>Google</th><th>Website</th><th class="num">Entfernung</th><th>Status</th><th></th></tr>
-      ${vis.map((p, i) => `<tr><td>${p.prospect ? '' : `<input type="checkbox" class="sel" value="${i}">`}</td><td><b>${e(p.name)}</b><div class="small sub">${e(p.category)} · ${e(p.address)}</div></td>
-        <td class="num" title="${e(p.potential.why.join(', '))}">${potBadge(p.potential.score)}</td><td>${starTxt(p.rating, p.review_count)}</td>
-        <td>${p.website ? `<a href="${e(p.website)}" target="_blank" rel="noopener">Ja ↗</a>` : '<b class="bad">Nein</b>'}</td><td class="num">${String(p.distance_km).replace('.', ',')} km</td>
-        <td>${p.prospect ? `<span class="badge won">${e(PSTATUS[p.prospect.status] || p.prospect.status)}</span>` : '<span class="sub small">Nicht hinzugefügt</span>'}</td>
-        <td class="num">${p.prospect ? '' : `<button class="btn sm" data-add="${i}">+ Hinzufügen</button>`}</td></tr>`).join('')}</table></div>`;
-    const setFilt = (k, val) => { filt[k] = val; sessionStorage.setItem('lff', JSON.stringify(filt)); show(data); };
-    $('#fnw').onchange = (ev) => setFilt('noweb', ev.target.checked); $('#flr').onchange = (ev) => setFilt('lowrating', ev.target.checked);
-    const upd = () => { sel.clear(); $$('.sel:checked').forEach((c) => sel.add(Number(c.value))); $('#addSel').disabled = $('#addChk').disabled = !sel.size; };
+  let data = last; let map = null; let markers = null;
+  const save = () => sessionStorage.setItem('lf', JSON.stringify(data));
+  const filt = J(localStorageGet('lffilt'), null) || { levels: ['hoch', 'mittel', 'niedrig'], noweb: false, lowrating: false, fewreviews: false, onlynew: false };
+  const cols = J(localStorageGet('lfcols'), null) || Object.fromEntries(FINDER_COLS.map((c) => [c.key, true]));
+  let sort = J(localStorageGet('lfsort'), null) || { key: 'potential', dir: -1 };
+  const keep = () => { localStorageSet('lffilt', JSON.stringify(filt)); localStorageSet('lfcols', JSON.stringify(cols)); localStorageSet('lfsort', JSON.stringify(sort)); };
+  const visible = () => data.results.filter((p) => filt.levels.includes(p.potential.level) && (!filt.noweb || !p.website) && (!filt.lowrating || (p.rating ?? 0) < 4.5)
+    && (!filt.fewreviews || (p.review_count || 0) < 20) && (!filt.onlynew || !p.prospect));
+  const sortVal = { name: (p) => p.name.toLowerCase(), potential: (p) => p.potential.score, rating: (p) => p.rating ?? -1, reviews: (p) => p.review_count || 0, distance: (p) => p.distance_km, website: (p) => (p.website ? 1 : 0) };
+  const sorted = (arr) => [...arr].sort((a, b) => { const x = sortVal[sort.key](a); const y = sortVal[sort.key](b); return (x > y ? 1 : x < y ? -1 : 0) * sort.dir; });
+  const th = (c) => c.sort ? `<th class="${c.num ? 'num ' : ''}sortable" data-sort="${c.sort}">${c.label}${sort.key === c.sort ? (sort.dir > 0 ? ' ↑' : ' ↓') : ''}</th>` : `<th class="${c.num ? 'num' : ''}">${c.label}</th>`;
+  const cell = (c, p, i) => ({
+    potential: `<td class="num" data-cell="pot">${potPill(p.potential, p.website && !p.site)}</td>`,
+    presence: `<td data-cell="pres">${presence(p)}</td>`,
+    google: `<td>${p.rating == null ? '<span class="sub">Keine Rezensionen</span>' : `<span class="stars">${'★'.repeat(Math.round(p.rating))}</span> ${String(p.rating).replace('.', ',')}<div class="small sub">${p.review_count} Bewertungen</div>`}</td>`,
+    website: `<td>${p.website ? `<a href="${e(p.website)}" target="_blank" rel="noopener">Ja ↗</a>` : '<b class="bad">Nein</b>'}</td>`,
+    distance: `<td class="num">${String(p.distance_km).replace('.', ',')} km</td>`,
+    status: `<td>${p.prospect ? `<span class="badge won">${e(PSTATUS[p.prospect.status] || p.prospect.status)}</span>` : '<span class="badge">Nicht hinzugefügt</span>'}</td>`,
+    action: `<td class="num">${p.prospect ? `<a class="btn sm" href="#/audits" onclick="sessionStorage.setItem('pfil',JSON.stringify({q:${e(JSON.stringify(p.name))}}))">Öffnen</a>` : `<button class="btn sm" data-add="${i}">+ Hinzufügen</button>`}</td>`,
+  })[c.key];
+
+  const drawMap = (vis) => loadLeaflet().then((L) => {
+    if (!$('#lmap')) return;
+    if (!map) {
+      map = L.map('lmap').setView([data.center.lat, data.center.lng], 12);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(map);
+      L.circle([data.center.lat, data.center.lng], { radius: (data.q.radius_km || 5) * 1000, color: '#2563eb', weight: 1, fillOpacity: 0.04 }).addTo(map);
+    }
+    markers?.remove(); markers = L.layerGroup().addTo(map);
+    const pts = vis.filter((p) => p.lat != null).map((p) => {
+      L.marker([p.lat, p.lng], { icon: pin(p.prospect ? '#64748b' : LEVEL[p.potential.level].c, p.potential.score) }).addTo(markers)
+        .bindPopup(`<b>${e(p.name)}</b><br>${e(p.address)}<br>Lead-Bewertung: <b>${p.potential.score} % ${LEVEL[p.potential.level].t}</b><br>${e(p.potential.why.join(', '))}`);
+      return [p.lat, p.lng];
+    });
+    if (pts.length && !drawMap.fitted) { map.fitBounds(pts, { padding: [30, 30], maxZoom: 14 }); drawMap.fitted = true; }
+  }).catch(() => { if ($('#lmap')) $('#lmap').outerHTML = '<p class="sub" style="padding:12px">Karte konnte nicht geladen werden.</p>'; });
+
+  const show = () => {
+    const vis = sorted(visible()); const active = FINDER_COLS.filter((c) => cols[c.key]);
+    const hidden = data.results.length - vis.length;
+    if (!$('#lmap')) $('#lfr').innerHTML = `<div class="card mb" style="padding:0;overflow:hidden"><div id="lmap" style="height:380px"></div></div><div class="card tablewrap" id="lft"></div>`;
+    $('#lft').innerHTML = `<div class="row mb"><b class="grow">Wähle potenzielle Kunden aus, um sie zu prüfen und hinzuzufügen</b>
+      <div class="dd"><button class="btn" id="fbtn">⚙ Filter${hidden ? ` (${hidden} ausgeblendet)` : ''}</button><div class="dd-menu" id="fmenu" hidden>
+        <b class="small">Lead-Bewertung</b>${Object.entries(LEVEL).map(([k, l]) => `<label class="check"><input type="checkbox" data-lv="${k}" ${filt.levels.includes(k) ? 'checked' : ''}> ${l.t}</label>`).join('')}
+        <b class="small mt">Weitere</b>${[['noweb', 'Nur ohne Website'], ['lowrating', 'Bewertung unter 4,5'], ['fewreviews', 'Weniger als 20 Bewertungen'], ['onlynew', 'Nur noch nicht hinzugefügte']]
+          .map(([k, t]) => `<label class="check"><input type="checkbox" data-fl="${k}" ${filt[k] ? 'checked' : ''}> ${t}</label>`).join('')}</div></div>
+      <div class="dd"><button class="btn" id="cbtn">Spalten verwalten ▾</button><div class="dd-menu" id="cmenu" hidden>${FINDER_COLS.map((c) => `<label class="check"><input type="checkbox" data-col="${c.key}" ${cols[c.key] ? 'checked' : ''}> ${c.label}</label>`).join('')}</div></div>
+      <button class="btn" id="addSel" disabled>👥 Mehrere hinzufügen</button><button class="btn primary" id="addChk" disabled>Hinzufügen & prüfen</button></div>
+      <table><tr><th><input type="checkbox" id="all"></th>${th({ label: 'Unternehmen', sort: 'name' })}${active.map(th).join('')}</tr>
+      ${vis.map((p) => { const i = data.results.indexOf(p); return `<tr data-row="${i}"><td>${p.prospect ? '' : `<input type="checkbox" class="sel" value="${i}">`}</td>
+        <td><b>${e(p.name)}</b><div class="small sub">${e(p.category ? p.category + ' · ' : '')}${e(p.address)}</div></td>${active.map((c) => cell(c, p, i)).join('')}</tr>`; }).join('')}</table>
+      ${vis.length ? '' : '<p class="sub">Keine Treffer für diese Filter.</p>'}<p class="small sub mt">${data.results.length} Unternehmen gefunden · Lead-Bewertung: je höher, desto mehr Bedarf an Website, Google-Profil oder Bewertungen.</p>`;
+    const toggle = (btn, menu) => { $(btn).onclick = (ev) => { ev.stopPropagation(); $$('.dd-menu').forEach((m) => m.id !== menu.slice(1) && (m.hidden = true)); $(menu).hidden = !$(menu).hidden; }; $(menu).onclick = (ev) => ev.stopPropagation(); };
+    toggle('#fbtn', '#fmenu'); toggle('#cbtn', '#cmenu');
+    const reopen = (menu) => { show(); $(menu).hidden = false; };
+    $$('[data-lv]').forEach((c) => (c.onchange = () => { filt.levels = $$('[data-lv]:checked').map((x) => x.dataset.lv); keep(); reopen('#fmenu'); drawMap(sorted(visible())); }));
+    $$('[data-fl]').forEach((c) => (c.onchange = () => { filt[c.dataset.fl] = c.checked; keep(); reopen('#fmenu'); drawMap(sorted(visible())); }));
+    $$('[data-col]').forEach((c) => (c.onchange = () => { cols[c.dataset.col] = c.checked; keep(); reopen('#cmenu'); }));
+    $$('[data-sort]').forEach((h) => (h.onclick = () => { const k = h.dataset.sort; sort = { key: k, dir: sort.key === k ? -sort.dir : (k === 'name' || k === 'distance' ? 1 : -1) }; keep(); show(); }));
+    const sel = () => $$('.sel:checked').map((c) => Number(c.value));
+    const upd = () => { const n = sel().length; $('#addSel').disabled = $('#addChk').disabled = !n; $('#addSel').textContent = n ? `👥 ${n} hinzufügen` : '👥 Mehrere hinzufügen'; };
     $$('.sel').forEach((c) => (c.onchange = upd)); $('#all').onchange = (ev) => { $$('.sel').forEach((c) => (c.checked = ev.target.checked)); upd(); };
-    const add = async (idx, audit) => {
-      const items = idx.map((i) => ({ ...vis[i], potential: undefined, prospect: undefined }));
-      const r = await POST('/api/prospects', { items, audit });
-      toast(`${r.added} Interessent(en) hinzugefügt${audit ? ' und geprüft' : ''}${r.items.some((x) => x.error) ? ' – einige Checks fehlgeschlagen' : ''}`);
-      const again = await POST('/api/prospects/search', data.q); again.q = data.q; sessionStorage.setItem('lf', JSON.stringify(again)); show(again);
-    };
     $$('[data-add]').forEach((b) => (b.onclick = safe(async () => { b.disabled = true; await add([Number(b.dataset.add)], false); })));
-    $('#addSel').onclick = safe(async () => { $('#addSel').disabled = true; await add([...sel], false); });
-    $('#addChk').onclick = safe(async () => { $('#addChk').disabled = true; $('#addChk').textContent = `⏳ Prüfe ${sel.size} …`; await add([...sel], true); });
-    loadLeaflet().then((L) => {
-      const m = L.map('lmap').setView([data.center.lat, data.center.lng], 12);
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(m);
-      L.circle([data.center.lat, data.center.lng], { radius: (data.q.radius_km || 5) * 1000, color: '#2563eb', weight: 1, fillOpacity: 0.04 }).addTo(m);
-      const pts = vis.filter((p) => p.lat != null).map((p) => { L.marker([p.lat, p.lng], { icon: pin(p.prospect ? '#16a34a' : !p.website ? '#dc2626' : '#2563eb', p.potential.score) }).addTo(m)
-        .bindPopup(`<b>${e(p.name)}</b><br>${e(p.address)}<br>${p.website ? 'Website ✓' : '<b>Keine Website</b>'} · ${p.rating ?? '–'}★`); return [p.lat, p.lng]; });
-      if (pts.length) m.fitBounds(pts, { padding: [30, 30], maxZoom: 14 });
-    }).catch(() => { $('#lmap').outerHTML = '<p class="sub" style="padding:12px">Karte konnte nicht geladen werden.</p>'; });
+    $('#addSel').onclick = safe(async () => { $('#addSel').disabled = true; await add(sel(), false); });
+    $('#addChk').onclick = safe(async () => { const ids = sel(); $('#addChk').disabled = true; $('#addChk').textContent = `⏳ Prüfe ${ids.length} …`; await add(ids, true); });
+    drawMap(vis);
   };
-  if (last) show(last);
+  document.addEventListener('click', () => $$('.dd-menu').forEach((m) => (m.hidden = true)));
+
+  const add = async (idx, audit) => {
+    const items = idx.map((i) => { const { potential, prospect, site, distance_km, ...rest } = data.results[i]; return rest; });
+    const r = await POST('/api/prospects', { items, audit });
+    toast(`${r.added} Interessent(en) hinzugefügt${audit ? ' und geprüft' : ''}${r.items.some((x) => x.error) ? ' – einige Checks fehlgeschlagen' : ''}`);
+    r.items.forEach((x, k) => { data.results[idx[k]].prospect = { id: x.id, status: audit && !x.error ? 'geprüft' : 'neu' }; });
+    save(); show();
+  };
+
+  // Websites nach und nach im Hintergrund prüfen (Spinner → Bewertung)
+  const quickCheck = async () => {
+    const todo = data.results.filter((p) => p.website && !p.site);
+    for (let k = 0; k < todo.length; k += 5) {
+      const batch = todo.slice(k, k + 5);
+      try {
+        const res = await POST('/api/prospects/quick-check', { items: batch.map(({ potential, prospect, site, distance_km, ...rest }) => rest) });
+        for (const r of res) { const p = data.results.find((x) => x.place_id === r.place_id); if (p) { p.site = r.site; p.potential = r.potential; } }
+      } catch { for (const p of batch) p.site = { reachable: false, error: 'Prüfung fehlgeschlagen' }; }
+      save();
+      if (!$('#lft')) return; // Ansicht gewechselt
+      for (const p of batch) {
+        const row = $(`[data-row="${data.results.indexOf(p)}"]`);
+        if (row) { const pc = $('[data-cell="pot"]', row); if (pc) pc.innerHTML = potPill(p.potential, false); const pr = $('[data-cell="pres"]', row); if (pr) pr.innerHTML = presence(p); }
+      }
+    }
+    if (sort.key === 'potential' && todo.length) show();
+  };
+
+  if (last) { show(); quickCheck(); }
   $('#lff').onsubmit = safe(async (ev) => {
     ev.preventDefault(); const q = formData(ev.target); q.radius_km = Number(q.radius_km);
     $('#sb').disabled = true; $('#sb').textContent = 'Suche …';
-    try { const data = await POST('/api/prospects/search', q); data.q = q; sessionStorage.setItem('lf', JSON.stringify(data)); show(data); }
+    try { data = await POST('/api/prospects/search', q); data.q = q; save(); map = null; drawMap.fitted = false; $('#lfr').innerHTML = ''; show(); quickCheck(); }
     finally { $('#sb').disabled = false; $('#sb').textContent = 'Suchen'; }
   });
 }

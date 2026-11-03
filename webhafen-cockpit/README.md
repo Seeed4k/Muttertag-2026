@@ -112,6 +112,11 @@ Kurzlinks `https://deine-app/l/slug` mit Klickzählung – für Flyer, QR-Codes,
   in einer Tabelle, mit Bewertung, Website ja/nein, Entfernung und einem **Potenzial-Wert** (0–100: keine
   Website, wenige Bewertungen, kaum Fotos, keine Öffnungszeiten …). Filter „nur ohne Website“.
   Einzeln oder gesammelt übernehmen – auf Wunsch direkt mit Website-Check.
+  Jede gefundene Website wird im Hintergrund kurz angeprüft (erreichbar, https, mobiloptimiert, Tracking,
+  Chat, erkanntes System wie WordPress oder Homepage-Baukasten wie Jimdo/Wix). Daraus entsteht die
+  **Lead-Bewertung** in % mit Stufe **Hoch / Mittel / Niedrig**; die Ergebnisse werden 7 Tage zwischengespeichert.
+  Spalten ein-/ausblenden, nach jeder Spalte sortieren, filtern nach Stufe, „ohne Website“, „Bewertung unter 4,5“,
+  „weniger als 20 Bewertungen“ und „noch nicht hinzugefügt“.
 - **Interessenten-Konten**: alle gefundenen Unternehmen mit Status, Quelle, Check-Ergebnis und Berichtsaufrufen;
   mit einem Klick ins CRM (Kontakt + Lead in der ersten Pipeline).
 - **Prospect-Agent**: sucht täglich oder wöchentlich automatisch („Dachdecker, 20 km um Haren, nur ohne
